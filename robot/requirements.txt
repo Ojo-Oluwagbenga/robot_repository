@@ -1,0 +1,16 @@
+# Raspberry Pi 5 Humanoid Robot Controller Dependencies
+# GPIO access for Raspberry Pi 5 (RP1 chip)
+lgpio>=0.2.2.0; platform_system=="Linux"
+
+# Testing framework
+pytest>=7.0.0
+
+# Cognitive Brain & Speech Dependencies
+requests>=2.31.0
+ddgs>=9.0.0
+sounddevice>=0.4.6
+vosk>=0.3.45
+
+# Computer Vision & Binocular Stereo Camera
+opencv-python>=4.8.0
+numpy>=1.24.0

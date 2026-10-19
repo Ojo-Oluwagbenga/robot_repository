@@ -1,0 +1,38 @@
+# Temporary & build caches
+build_cache/
+build_cache_esp/
+build_cache_esp1/
+build_cache_esp4/
+build_esp32/
+build/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+*$py.class
+*.orig
+
+# Android build outputs & local config
+luku/build/
+.gradle/
+local.properties
+*.idsig
+
+# Next.js & Node.js
+robot_bridge_site/node_modules/
+robot_bridge_site/.next/
+robot_bridge_site/out/
+.env.local
+.env*.local
+
+# Logs and runtime databases
+logs/
+*.log
+.stashed_ids.json
+instructions.json
+
+# System & editor files
+.git_backup/
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

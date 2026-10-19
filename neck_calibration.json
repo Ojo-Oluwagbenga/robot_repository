@@ -1,0 +1,19 @@
+{
+  "gain_yaw": 3.0,
+  "gain_pitch": 3.5,
+  "yaw_dir_right": 0,
+  "yaw_dir_left": 1,
+  "pitch_dir_up": 0,
+  "pitch_dir_down": 1,
+  "deadband_x": 25,
+  "deadband_y": 25,
+  "max_step_pulses_yaw": 350,
+  "max_step_pulses_pitch": 350,
+  "calibrated_at": "initial_default",
+  "limits": {
+    "pitch_min": 0,
+    "pitch_max": 5000,
+    "yaw_min": -3000,
+    "yaw_max": 3000
+  }
+}

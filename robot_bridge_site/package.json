@@ -1,0 +1,16 @@
+{
+  "name": "robot_bridge_site",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -H 0.0.0.0",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "16.3.6",
+    "qrcode": "^1.5.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  }
+}

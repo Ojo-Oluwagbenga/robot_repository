@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Nova Robot Voice Interface | Real-Time Gemini Stream</title>
+  <meta name="description" content="Smooth, real-time bidirectional voice conversation with Nova Humanoid Robot Brain powered by Google Gemini.">
+  
+  <!-- Modern Google Fonts: Outfit & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="theme-dark">
+  <!-- HTTPS Mobile Notice Banner -->
+  <div id="httpsBanner" class="https-banner hidden">
+    <span>🔒 <strong>Mobile Phone Notice:</strong> Phone microphones require HTTPS to speak.</span>
+    <a id="httpsSwitchLink" href="#">Switch to Secure HTTPS (Port 8443)</a>
+  </div>
+
+  <!-- Dynamic Ambient Background Glow -->
+  <div class="ambient-glow glow-cyan"></div>
+  <div class="ambient-glow glow-violet"></div>
+  <div class="ambient-glow glow-rose"></div>
+
+  <div class="app-layout">
+    <!-- Top Header Navigation -->
+    <header class="top-nav glass-panel">
+      <div class="nav-left">
+        <div class="robot-avatar">
+          <div class="avatar-ring"></div>
+          <span class="avatar-icon">✦</span>
+        </div>
+        <div class="robot-meta">
+          <div class="robot-title-row">
+            <h1 class="robot-name">NOVA</h1>
+            <span id="connectionBadge" class="badge badge-online">
+              <span class="pulse-dot"></span>
+              <span id="connectionText">READY</span>
+            </span>
+          </div>
+          <span class="robot-sub">Device Voice Loop • Gemini AI Brain</span>
+        </div>
+      </div>
+
+      <div class="nav-center">
+        <!-- Conversation Mode Selector -->
+        <div class="mode-pill glass-card" id="modeSelector">
+          <button id="modeHandsFree" class="mode-btn active" title="Continuous full-duplex voice conversation with auto-silence detection">
+            <svg class="mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+            <span>Hands-Free Live</span>
+          </button>
+          <button id="modePushToTalk" class="mode-btn" title="Push/Hold to talk mode for noisy environments">
+            <svg class="mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+            <span>Push-to-Talk</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="nav-right">
+        <!-- Network IP Pill -->
+        <button id="networkIpPill" class="network-pill glass-card" title="Click to copy network access URL for your phone/tablet">
+          <svg class="net-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          <span id="networkIpText">Network URL</span>
+          <span class="copy-badge">Copy</span>
+        </button>
+
+        <!-- Toggle Transcript Drawer -->
+        <button id="toggleDrawerBtn" class="icon-btn glass-card" title="Toggle Chat Transcript Log">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span id="unreadBadge" class="unread-dot hidden"></span>
+        </button>
+
+        <!-- Settings Button -->
+        <button id="settingsBtn" class="icon-btn glass-card" title="Voice & AI Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content Area: Visualizer Stage -->
+    <main class="main-stage">
+      <!-- Status Pill Indicator -->
+      <div class="state-container">
+        <div id="stateIndicator" class="state-pill state-idle">
+          <span class="state-orb"></span>
+          <span id="stateLabel">TAP MIC TO START CONVERSATION</span>
+        </div>
+      </div>
+
+      <!-- Holographic Bioluminescent Audio Canvas -->
+      <div class="visualizer-wrapper">
+        <canvas id="visualizerCanvas" width="600" height="600"></canvas>
+        
+        <!-- Central Reactive Glowing Core Button -->
+        <button id="micOrbBtn" class="mic-core-button" title="Start voice conversation" aria-label="Microphone Control">
+          <div class="core-glow"></div>
+          <div class="core-ripple"></div>
+          <div class="core-icon-box">
+            <svg id="micIcon" class="core-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+            <div id="speakingWaves" class="wave-bars hidden">
+              <span></span><span></span><span></span><span></span><span></span>
+            </div>
+          </div>
+        </button>
+      </div>
+
+      <!-- Live Interactive Subtitle & Response Stream -->
+      <div class="stream-card glass-panel" id="streamCard">
+        <div class="stream-header">
+          <span id="streamSpeaker" class="speaker-tag speaker-nova">NOVA</span>
+          <span id="audioMeterText" class="meter-text">Input: 0 dB</span>
+        </div>
+        
+        <!-- Audio Input RMS Energy Meter -->
+        <div class="meter-container">
+          <div id="audioMeterBar" class="meter-fill" style="width: 0%;"></div>
+        </div>
+
+        <div class="stream-body">
+          <p id="streamText" class="stream-content">
+            "Hello! I'm Nova, your humanoid robot voice companion. Tap the glowing core or press spacebar to speak with me."
+          </p>
+        </div>
+
+        <!-- Quick Speech Prompts -->
+        <div class="quick-prompts-row" id="quickPrompts">
+          <button class="prompt-chip" data-prompt="Introduce yourself and describe your embodiment.">✦ Who are you?</button>
+          <button class="prompt-chip" data-prompt="What hardware components and motors power your body?">✦ Hardware specs</button>
+          <button class="prompt-chip" data-prompt="How does your 3-wire bus communicate with the 5 ESP32 controllers?">✦ ESP32 bus protocol</button>
+          <button class="prompt-chip" data-prompt="Tell me a witty robotics joke.">✦ Tell a joke</button>
+        </div>
+      </div>
+
+      <!-- Quick Control Dock -->
+      <div class="control-dock glass-card">
+        <button id="muteBtn" class="dock-btn" title="Mute AI Speech Output">
+          <svg class="dock-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          <span id="muteLabel">Sound On</span>
+        </button>
+
+        <button id="interruptBtn" class="dock-btn dock-btn-warning" title="Interrupt Nova and start talking">
+          <svg class="dock-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+          <span>Interrupt</span>
+        </button>
+
+        <button id="clearChatBtn" class="dock-btn" title="Clear Conversation History">
+          <svg class="dock-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          <span>Clear</span>
+        </button>
+      </div>
+    </main>
+
+    <!-- Slide-Out Conversation Log Drawer -->
+    <aside id="transcriptDrawer" class="transcript-drawer glass-panel">
+      <div class="drawer-header">
+        <div class="drawer-title-group">
+          <h2>Conversation Log</h2>
+          <span id="turnCounter" class="turn-count">0 turns</span>
+        </div>
+        <button id="closeDrawerBtn" class="icon-btn-sm" title="Close Drawer">✕</button>
+      </div>
+
+      <div id="chatMessageList" class="drawer-chat-list">
+        <div class="chat-turn assistant-turn">
+          <div class="turn-bubble">
+            <span class="turn-author">NOVA</span>
+            <p>Voice streaming connection initialized. I am ready to converse!</p>
+            <span class="turn-time">Just now</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Text Input Fallback in Drawer -->
+      <form id="textChatForm" class="drawer-input-row">
+        <input type="text" id="textChatInput" placeholder="Type a message or speak..." autocomplete="off">
+        <button type="submit" id="textSendBtn" class="send-btn" title="Send message">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </form>
+    </aside>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal-backdrop hidden">
+      <div class="modal-card glass-panel">
+        <div class="modal-header">
+          <h3>Device Voice & Conversation Settings</h3>
+          <button id="closeSettingsBtn" class="icon-btn-sm">✕</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="setting-group">
+            <label>Device Speech-to-Text (Microphone Input)</label>
+            <div id="sttEngineBadge" class="stt-badge">
+              <span class="pulse-dot"></span>
+              <span id="sttEngineText">Device Native Speech-to-Text (webkitSpeechRecognition)</span>
+            </div>
+            <span class="setting-hint">Your phone transcribes speech locally in real-time. Text enters Gemini, and Gemini feeds back for your phone to speak aloud through the speaker.</span>
+          </div>
+
+          <div class="setting-group">
+            <div class="slider-header">
+              <label for="voiceSelect">Device Text-to-Speech (Speaker Output)</label>
+              <button id="testVoiceBtn" type="button" class="test-voice-btn" title="Click to test device speech audio">▶ Test Voice</button>
+            </div>
+            <select id="voiceSelect" class="form-select">
+              <option value="">Detecting device installed voices...</option>
+            </select>
+            <span class="setting-hint">Uses your phone/computer's built-in Text-To-Speech engine. Gemini provides intelligent conversation text; your device speaks it aloud.</span>
+          </div>
+
+          <div class="setting-group">
+            <div class="slider-header">
+              <label for="speechVolume">Device Speaker Volume</label>
+              <span id="speechVolumeVal">100%</span>
+            </div>
+            <input type="range" id="speechVolume" min="0" max="1" step="0.05" value="1" class="form-range">
+            <span class="setting-hint">Controls output loudness through your device speaker / connected Bluetooth.</span>
+          </div>
+
+          <div class="setting-group">
+            <div class="slider-header">
+              <label for="speechRate">Device Speech Rate / Speed</label>
+              <span id="speechRateVal">1.05x</span>
+            </div>
+            <input type="range" id="speechRate" min="0.7" max="1.5" step="0.05" value="1.05" class="form-range">
+          </div>
+
+          <div class="setting-group">
+            <div class="slider-header">
+              <label for="vadThreshold">VAD Sensitivity (Speech Detection)</label>
+              <span id="vadThresholdVal">22</span>
+            </div>
+            <input type="range" id="vadThreshold" min="10" max="60" value="22" class="form-range">
+            <span class="setting-hint">Lower = picks up whispers; Higher = ignores room noise.</span>
+          </div>
+
+          <div class="setting-group">
+            <div class="slider-header">
+              <label for="silenceTimeout">Silence Pause Before Sending</label>
+              <span id="silenceTimeoutVal">1.3s</span>
+            </div>
+            <input type="range" id="silenceTimeout" min="0.8" max="2.5" step="0.1" value="1.3" class="form-range">
+            <span class="setting-hint">How long you must pause speaking before Gemini responds.</span>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button id="saveSettingsBtn" class="primary-btn">Save Settings</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
