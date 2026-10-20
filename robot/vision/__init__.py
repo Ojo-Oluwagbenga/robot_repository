@@ -40,6 +40,14 @@ except (ImportError, ValueError):
     except (ImportError, ValueError):
         from robot.vision.hand_recognizer import MultiAngleHandRecognizer, HandRecognitionResult
 
+try:
+    from .hand_ball_tracker import HandBallGraspTracker, GraspResult
+except (ImportError, ValueError):
+    try:
+        from hand_ball_tracker import HandBallGraspTracker, GraspResult
+    except (ImportError, ValueError):
+        from robot.vision.hand_ball_tracker import HandBallGraspTracker, GraspResult
+
 __all__ = [
     "BinocularCamera",
     "MultiBallTracker",
@@ -50,5 +58,7 @@ __all__ = [
     "MarkerState",
     "MultiAngleHandRecognizer",
     "HandRecognitionResult",
+    "HandBallGraspTracker",
+    "GraspResult",
 ]
 

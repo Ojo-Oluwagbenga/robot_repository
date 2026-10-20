@@ -529,7 +529,7 @@ export default function Home() {
             >
               {mounted && typeof window !== "undefined"
                 ? `${window.location.origin}/gemini`
-                : "http://10.97.173.172:3000/gemini"}
+                : "http://10.208.131.172:3000/gemini"}
             </a>
           </p>
         </div>
