@@ -43,7 +43,7 @@ AI_BACKEND = os.environ.get("ROBOT_AI_BACKEND", "ollama").lower()
 
 # Gemini API Configuration
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.environ.get("ROBOT_GEMINI_MODEL", "gemini-flash-lite-latest")
+GEMINI_MODEL = os.environ.get("ROBOT_GEMINI_MODEL", "gemini-3.8-flash")
 
 # Ollama API Configuration (Primary & Fallback)
 CANDIDATE_OLLAMA_URLS = [
