@@ -3,7 +3,37 @@ Configuration settings for the Raspberry Pi 5 Humanoid Robot Controller.
 All GPIO pins use BCM (Broadcom) numbering.
 """
 
+import os
+from pathlib import Path
 from typing import Dict, List
+
+# Lightweight .env loader searching standard locations
+CONFIG_DIR = Path(__file__).resolve().parent
+_env_candidates = [
+    CONFIG_DIR / "brain" / ".env",
+    CONFIG_DIR / ".env",
+    CONFIG_DIR.parent / ".env",
+    Path.cwd() / ".env",
+    Path.home() / "projects" / "Robot" / ".env",
+    Path.home() / ".env",
+]
+for _cand in _env_candidates:
+    if _cand.is_file():
+        try:
+            with open(_cand, "r", encoding="utf-8") as _f:
+                for _line in _f:
+                    _line = _line.strip()
+                    if _line and not _line.startswith("#") and "=" in _line:
+                        _k, _v = _line.split("=", 1)
+                        _k, _v = _k.strip(), _v.strip().strip("'\"")
+                        if _k and _k not in os.environ:
+                            os.environ[_k] = _v
+        except Exception:
+            pass
+
+# Gemini AI API Configuration from environment
+GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY", "")
+ROBOT_GEMINI_MODEL: str = os.environ.get("ROBOT_GEMINI_MODEL", "gemini-flash-lite-latest")
 
 # ==============================================================================
 # 1. RASPBERRY PI 5 GPIO PIN ASSIGNMENTS (BCM Numbering)

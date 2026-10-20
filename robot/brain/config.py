@@ -12,8 +12,16 @@ BRAIN_DIR = Path(__file__).resolve().parent
 DATA_DIR = BRAIN_DIR / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-# Lightweight .env loader (checks robot/brain/.env and project root .env)
-for env_candidate in [BRAIN_DIR / ".env", BRAIN_DIR.parent / ".env", BRAIN_DIR.parent.parent / ".env"]:
+# Lightweight .env loader (checks robot/brain/.env, project root .env, and home dirs)
+_env_candidates = [
+    BRAIN_DIR / ".env",
+    BRAIN_DIR.parent / ".env",
+    BRAIN_DIR.parent.parent / ".env",
+    Path.cwd() / ".env",
+    Path.home() / "projects" / "Robot" / ".env",
+    Path.home() / ".env",
+]
+for env_candidate in _env_candidates:
     if env_candidate.is_file():
         try:
             with open(env_candidate, "r", encoding="utf-8") as f:

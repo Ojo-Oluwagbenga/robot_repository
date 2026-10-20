@@ -41,15 +41,26 @@ BRAIN_DIR = PROJECT_ROOT / "robot" / "brain"
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# Load environment variables from robot/brain/.env if present
-env_file = BRAIN_DIR / ".env"
-if env_file.exists():
-    with open(env_file, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                k, v = line.split("=", 1)
-                os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+# Load environment variables from standard .env locations
+_env_candidates = [
+    BRAIN_DIR / ".env",
+    PROJECT_ROOT / "robot" / ".env",
+    PROJECT_ROOT / ".env",
+    Path.cwd() / ".env",
+    Path.home() / "projects" / "Robot" / ".env",
+    Path.home() / ".env",
+]
+for _env_f in _env_candidates:
+    if _env_f.is_file():
+        try:
+            with open(_env_f, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+        except Exception:
+            pass
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 DEFAULT_MODEL = os.environ.get("ROBOT_GEMINI_MODEL", "gemini-flash-lite-latest")

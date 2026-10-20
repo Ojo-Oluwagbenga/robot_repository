@@ -5,7 +5,7 @@ import android.content.SharedPreferences;
 
 /** Central place for all user-configurable settings. */
 final class Prefs {
-    static final String DEFAULT_GEMINI_KEY = "AIzaSyAQbi6-wt-GsRH4RbQzSedhDF8P6tEzJGU";
+    static final String DEFAULT_GEMINI_KEY = "";
     static final String DEFAULT_MODEL = "gemini-3.5-flash";
     static final String DEFAULT_BRIDGE_BASE = "http://10.97.173.172:3000";
     static final String DEFAULT_INSTRUCTION_URL = DEFAULT_BRIDGE_BASE + "/gemini";
