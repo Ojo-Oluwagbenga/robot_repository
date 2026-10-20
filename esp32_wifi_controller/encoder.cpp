@@ -1,7 +1,8 @@
 #include "encoder.h"
+#include "motor.h"
 
 Encoder::Encoder(uint8_t pulse_pin, uint8_t motor_id)
-    : _pulse_pin(pulse_pin), _motor_id(motor_id),
+    : _pulse_pin(pulse_pin), _motor_id(motor_id), _motor(nullptr),
       _raw_count(0), _execution_net_pulses(0), _absolute_position(0),
       _motor_direction(0), _is_active(false), _last_edge_time_us(0),
       _target_pulses(0), _pin_in1(255), _pin_in2(255),
@@ -69,6 +70,11 @@ void IRAM_ATTR Encoder::handleInterrupt() {
     if (_target_pulses > 0 && _raw_count >= _target_pulses) {
         if (_pin_in1 != 255) digitalWrite(_pin_in1, HIGH);
         if (_pin_in2 != 255) digitalWrite(_pin_in2, HIGH);
+    }
+
+    // 4. Notify MotorController of pulse edge
+    if (_motor != nullptr) {
+        _motor->onPulseEdge();
     }
     portEXIT_CRITICAL_ISR(&_mux);
 }

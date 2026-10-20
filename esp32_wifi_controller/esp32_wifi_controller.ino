@@ -16,6 +16,7 @@
 #include "wifi_communication.h"
 #include "encoder.h"
 #include "motor.h"
+#include "esp_timer.h"
 
 // Quick motor indexing array
 static MotorController* motors[NUM_MOTORS] = {
@@ -38,6 +39,13 @@ static MotorController* motors[NUM_MOTORS] = {
     &motor6,
 #endif
 };
+
+static void IRAM_ATTR motor_timer_callback(void* arg) {
+    (void)arg;
+    for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
+        motors[m]->onTimer1ms();
+    }
+}
 
 // =============================================================================
 // Visual LED Indicator (Onboard Blue LED on GPIO 2)
@@ -97,8 +105,19 @@ void setup() {
     pinMode(PIN_LED, OUTPUT);
     digitalWrite(PIN_LED, LOW);
 
-    // 1. Initialize motors with safe boot pin state
+    // 1. Initialize motors with safe boot pin state (IN1=HIGH, IN2=HIGH short brake)
     init_all_motors();
+
+    // 2. Start 1ms high-resolution timer for non-blocking brake & jam watchdog timing
+    const esp_timer_create_args_t periodic_timer_args = {
+        .callback = &motor_timer_callback,
+        .arg = NULL,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "motor_brake_timer"
+    };
+    esp_timer_handle_t motor_periodic_timer;
+    esp_timer_create(&periodic_timer_args, &motor_periodic_timer);
+    esp_timer_start_periodic(motor_periodic_timer, 1000); // 1000 us = 1 ms
 
     // 2. Initialize encoders (ESP 1 & ESP 2 only)
 #if ESP_ID != 3

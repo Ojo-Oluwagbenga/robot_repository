@@ -9,7 +9,7 @@
 // ESP1 = Right Arm / Body Motors 1 to 6 (with encoders)
 // ESP2 = Left Arm / Body Motors 1 to 6 (with encoders)
 // ESP3 = Head / Gripper Motors 1 & 2 (Ordinary motors with limit switches)
-#define ESP_ID 3
+#define ESP_ID 2
 
 // =============================================================================
 // 2. WI-FI & OVER-THE-AIR (OTA) CONFIGURATION
@@ -95,6 +95,12 @@
 
 // Time per pulse for ordinary motors on ESP3 (1 pulse = 10ms of run time)
 #define ESP3_MS_PER_PULSE        10
+
+// Jam Watchdog constant (2.0s of driven time with no pulse)
+#define MOTOR_JAM_TIMEOUT_MS 2000
+
+// Maximum profile sections per motor (e.g. A, B, C, D)
+#define MAX_PROFILE_SECTIONS 4
 
 // Maximum execution timeout
 #define MAX_EXECUTION_TIMEOUT_MS 10000

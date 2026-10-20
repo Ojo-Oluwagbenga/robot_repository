@@ -43,6 +43,9 @@ public:
 
     // Send JSON feedback packet back to the Pi / network broadcast
     bool sendFeedback(int esp_id, int motor_id, int32_t totalpulse, const char* instruction_id, const char* status);
+    bool sendDoneFeedback(int esp_id, int motor_id, uint32_t pulses, uint32_t running_time_ms, const char* instruction_id = "");
+    bool sendJamFeedback(int esp_id, int motor_id, uint32_t pulses, uint32_t running_time_ms, const char* section);
+    bool sendError(int esp_id, int motor_id, const char* reason, const char* message);
 
     // Broadcast current board status & telemetry
     bool sendStatusBroadcast();
@@ -80,6 +83,7 @@ private:
     void processIncomingPacket();
     bool parseJsonPacket(const char* jsonStr, JsonCommand& cmd);
     void parseMultiJsonPacket(const char* jsonStr);
+    void parseRuntimeMotorsPacket(const char* jsonStr);
     void enqueueCommand(const JsonCommand& cmd);
     void handleRoot();
     void handleUpdatePage();

@@ -1,5 +1,6 @@
 #include "wifi_communication.h"
 #include "encoder.h"
+#include "motor.h"
 #include <esp_wifi.h>
 #include <ctype.h>
 #include <string.h>
@@ -467,7 +468,14 @@ void WifiCommunication::processIncomingPacket() {
             continue;
         }
 
-        // 3. Multi-motor packet check
+        // 3. Runtime motors packet check (per-motor brake profile)
+        if (strstr(_incomingBuffer, "\"runtime_motors\"") != NULL) {
+            trigger_instruction_double_blink();
+            parseRuntimeMotorsPacket(_incomingBuffer);
+            continue;
+        }
+
+        // 4. Multi-motor packet check
         const char* movesPtr = strstr(_incomingBuffer, "\"moves\"");
         if (!movesPtr) movesPtr = strstr(_incomingBuffer, "\"motors\"");
 
@@ -589,6 +597,219 @@ bool WifiCommunication::sendFeedback(int esp_id, int motor_id, int32_t totalpuls
     }
 
     return ok;
+}
+
+bool WifiCommunication::sendDoneFeedback(int esp_id, int motor_id, uint32_t pulses, uint32_t running_time_ms, const char* instruction_id) {
+    char packet[256];
+    snprintf(packet, sizeof(packet),
+             "{\"esp\":%d,\"motor\":%d,\"status\":\"done\",\"pulses\":%lu,\"running_time_ms\":%lu,\"instructionID\":\"%s\"}",
+             esp_id, motor_id, (unsigned long)pulses, (unsigned long)running_time_ms,
+             (instruction_id && strlen(instruction_id) > 0) ? instruction_id : "none");
+
+#if DEBUG_LEVEL > 0
+    Serial.printf("[UDP TX DONE] -> %s\n", packet);
+#endif
+
+    _udp.beginPacket(IPAddress(255, 255, 255, 255), WIFI_UDP_PORT);
+    _udp.write((const uint8_t*)packet, strlen(packet));
+    bool ok = _udp.endPacket();
+
+    if (_lastSenderIP != IPAddress(255, 255, 255, 255) && _lastSenderIP != IPAddress(0, 0, 0, 0)) {
+        _udp.beginPacket(_lastSenderIP, _lastSenderPort);
+        _udp.write((const uint8_t*)packet, strlen(packet));
+        _udp.endPacket();
+    }
+    return ok;
+}
+
+bool WifiCommunication::sendJamFeedback(int esp_id, int motor_id, uint32_t pulses, uint32_t running_time_ms, const char* section) {
+    char packet[256];
+    if (section == nullptr || strcmp(section, "none") == 0) {
+        snprintf(packet, sizeof(packet),
+                 "{\"esp\":%d,\"motor\":%d,\"status\":\"error\",\"reason\":\"jam\",\"pulses\":%lu,\"running_time_ms\":%lu,\"section\":null}",
+                 esp_id, motor_id, (unsigned long)pulses, (unsigned long)running_time_ms);
+    } else {
+        snprintf(packet, sizeof(packet),
+                 "{\"esp\":%d,\"motor\":%d,\"status\":\"error\",\"reason\":\"jam\",\"pulses\":%lu,\"running_time_ms\":%lu,\"section\":\"%s\"}",
+                 esp_id, motor_id, (unsigned long)pulses, (unsigned long)running_time_ms, section);
+    }
+
+#if DEBUG_LEVEL > 0
+    Serial.printf("[UDP TX JAM] -> %s\n", packet);
+#endif
+
+    _udp.beginPacket(IPAddress(255, 255, 255, 255), WIFI_UDP_PORT);
+    _udp.write((const uint8_t*)packet, strlen(packet));
+    bool ok = _udp.endPacket();
+
+    if (_lastSenderIP != IPAddress(255, 255, 255, 255) && _lastSenderIP != IPAddress(0, 0, 0, 0)) {
+        _udp.beginPacket(_lastSenderIP, _lastSenderPort);
+        _udp.write((const uint8_t*)packet, strlen(packet));
+        _udp.endPacket();
+    }
+    return ok;
+}
+
+bool WifiCommunication::sendError(int esp_id, int motor_id, const char* reason, const char* message) {
+    char packet[256];
+    snprintf(packet, sizeof(packet),
+             "{\"esp\":%d,\"motor\":%d,\"status\":\"error\",\"reason\":\"%s\",\"message\":\"%s\"}",
+             esp_id, motor_id,
+             reason ? reason : "error",
+             message ? message : "");
+
+#if DEBUG_LEVEL > 0
+    Serial.printf("[UDP TX ERROR] -> %s\n", packet);
+#endif
+
+    _udp.beginPacket(IPAddress(255, 255, 255, 255), WIFI_UDP_PORT);
+    _udp.write((const uint8_t*)packet, strlen(packet));
+    bool ok = _udp.endPacket();
+
+    if (_lastSenderIP != IPAddress(255, 255, 255, 255) && _lastSenderIP != IPAddress(0, 0, 0, 0)) {
+        _udp.beginPacket(_lastSenderIP, _lastSenderPort);
+        _udp.write((const uint8_t*)packet, strlen(packet));
+        _udp.endPacket();
+    }
+    return ok;
+}
+
+void WifiCommunication::parseRuntimeMotorsPacket(const char* jsonStr) {
+    if (!jsonStr) return;
+
+    // Check optional ESP filter: if esp specified and != ESP_ID and != 0, ignore
+    int esp_id = extractJsonInt(jsonStr, "esp", -1);
+    if (esp_id < 0) esp_id = extractJsonInt(jsonStr, "esp_id", -1);
+    if (esp_id > 0 && esp_id != ESP_ID) return;
+
+    char topInstId[48];
+    topInstId[0] = '\0';
+    if (!extractJsonString(jsonStr, "instructionID", topInstId, sizeof(topInstId))) {
+        extractJsonString(jsonStr, "instruction_id", topInstId, sizeof(topInstId));
+    }
+
+    const char* p = strstr(jsonStr, "\"runtime_motors\"");
+    if (!p) return;
+    const char* arrStart = strchr(p, '[');
+    if (!arrStart) return;
+
+    // Iterate through each motor object in array
+    const char* cur = arrStart + 1;
+    while (*cur && *cur != ']') {
+        const char* objStart = strchr(cur, '{');
+        if (!objStart) break;
+
+        // Find end of motor object, accounting for nested braces in profile
+        int braceDepth = 0;
+        const char* objEnd = nullptr;
+        for (const char* s = objStart; *s; ++s) {
+            if (*s == '{') braceDepth++;
+            else if (*s == '}') {
+                braceDepth--;
+                if (braceDepth == 0) {
+                    objEnd = s;
+                    break;
+                }
+            }
+        }
+        if (!objEnd) break;
+
+        size_t objLen = (size_t)(objEnd - objStart + 1);
+        char motorBuf[1024];
+        if (objLen < sizeof(motorBuf)) {
+            memcpy(motorBuf, objStart, objLen);
+            motorBuf[objLen] = '\0';
+
+            int motor_id = extractJsonInt(motorBuf, "motor", 0);
+            int dir = extractJsonInt(motorBuf, "dir", 0);
+            int pulse = extractJsonInt(motorBuf, "pulse", 0);
+
+            MotorProfile prof;
+            memset(&prof, 0, sizeof(prof));
+
+            // Parse profile sections if present
+            const char* profPtr = strstr(motorBuf, "\"profile\"");
+            if (profPtr) {
+                const char* profBrace = strchr(profPtr, '{');
+                if (profBrace && profBrace < objEnd) {
+                    // Find sections inside profile
+                    const char* secCur = profBrace + 1;
+                    while (*secCur && *secCur != '}' && prof.section_count < MAX_PROFILE_SECTIONS) {
+                        const char* secStart = strchr(secCur, '{');
+                        if (!secStart) break;
+
+                        // Find section name preceding the '{'
+                        char secName[8] = "A";
+                        const char* kEnd = secStart - 1;
+                        while (kEnd > secCur && (*kEnd == ' ' || *kEnd == ':' || *kEnd == '\t' || *kEnd == '\r' || *kEnd == '\n')) kEnd--;
+                        if (*kEnd == '"') {
+                            const char* kStart = kEnd - 1;
+                            while (kStart > secCur && *kStart != '"') kStart--;
+                            if (*kStart == '"') {
+                                size_t kLen = (size_t)(kEnd - kStart - 1);
+                                if (kLen > 0 && kLen < sizeof(secName)) {
+                                    memcpy(secName, kStart + 1, kLen);
+                                    secName[kLen] = '\0';
+                                }
+                            }
+                        }
+
+                        const char* secEnd = strchr(secStart, '}');
+                        if (!secEnd) break;
+
+                        size_t secLen = (size_t)(secEnd - secStart + 1);
+                        char secBuf[256];
+                        if (secLen < sizeof(secBuf)) {
+                            memcpy(secBuf, secStart, secLen);
+                            secBuf[secLen] = '\0';
+
+                            BrakeSection& sec = prof.sections[prof.section_count];
+                            strncpy(sec.name, secName, sizeof(sec.name) - 1);
+
+                            char dtype[16];
+                            dtype[0] = '\0';
+                            extractJsonString(secBuf, "duration_type", dtype, sizeof(dtype));
+                            if (strcmp(dtype, "time") == 0) {
+                                sec.duration_type = DURATION_TIME;
+                            } else {
+                                sec.duration_type = DURATION_PULSE;
+                            }
+
+                            sec.start = extractJsonInt(secBuf, "start", 0);
+                            sec.end = extractJsonInt(secBuf, "end", 0);
+                            sec.brake_count = extractJsonInt(secBuf, "brake_count", 0);
+                            sec.brake_ms = extractJsonInt(secBuf, "brake_ms", 0);
+                            sec.active = (sec.brake_count > 0 && sec.end > sec.start);
+                            prof.section_count++;
+                        }
+                        secCur = secEnd + 1;
+                    }
+                }
+            }
+
+            // Dispatch to motor
+            int mIdx = motor_id - 1;
+            MotorController* mc = get_motor(mIdx);
+            if (mc != nullptr) {
+                char err[64];
+                err[0] = '\0';
+                char mInstId[48];
+                if (strlen(topInstId) > 0) {
+                    snprintf(mInstId, sizeof(mInstId), "%s_m%d", topInstId, motor_id);
+                } else {
+                    snprintf(mInstId, sizeof(mInstId), "prof_m%d_%lu", motor_id, millis());
+                }
+
+                bool ok = mc->startProfile(pulse, dir, prof, mInstId, err, sizeof(err));
+                if (!ok) {
+                    sendError(ESP_ID, motor_id, "invalid_config", err);
+                }
+            } else {
+                sendError(ESP_ID, motor_id, "invalid_motor", "motor ID out of range for board");
+            }
+        }
+        cur = objEnd + 1;
+    }
 }
 
 bool WifiCommunication::sendStatusBroadcast() {

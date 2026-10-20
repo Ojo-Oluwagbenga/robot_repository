@@ -4,11 +4,14 @@
 #include <Arduino.h>
 #include "config.h"
 
+class MotorController;
+
 class Encoder {
 public:
     Encoder(uint8_t pulse_pin, uint8_t motor_id);
 
     void begin();
+    void setMotorController(MotorController* motor) { _motor = motor; }
 
     // ISR handler called on single-pin pulse transitions
     void IRAM_ATTR handleInterrupt();
@@ -35,6 +38,7 @@ public:
 private:
     uint8_t _pulse_pin;
     uint8_t _motor_id;
+    MotorController* _motor;
 
     volatile uint32_t _raw_count;
     volatile int32_t _execution_net_pulses;
