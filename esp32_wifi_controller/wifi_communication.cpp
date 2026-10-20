@@ -721,6 +721,13 @@ void WifiCommunication::parseRuntimeMotorsPacket(const char* jsonStr) {
             motorBuf[objLen] = '\0';
 
             int motor_id = extractJsonInt(motorBuf, "motor", 0);
+            int m_esp = extractJsonInt(motorBuf, "esp", -1);
+            if (m_esp < 0) m_esp = extractJsonInt(motorBuf, "esp_id", -1);
+            if (m_esp > 0 && m_esp != ESP_ID) {
+                cur = objEnd + 1;
+                continue;
+            }
+
             int dir = extractJsonInt(motorBuf, "dir", 0);
             int pulse = extractJsonInt(motorBuf, "pulse", 0);
 

@@ -25,16 +25,26 @@ except ImportError:
 # ==============================================================================
 # RUNTIME CONFIG (Hardcoded block, editable before each run)
 # ==============================================================================
+# Destination ESP Boards:
+#   1 = Right Arm / Body Motors 1 to 6 (with encoders)
+#   2 = Left Arm / Body Motors 1 to 6 (with encoders)
+#   3 = Head / Gripper Motors 1 to 2 (with limit switches)
+#   4 = Legs Controller
+#
+# You can set "esp" directly inside each motor block (e.g. "esp": 1, "motor": 5).
+# Different motors in the same run can target different ESPs simultaneously!
+# If "esp" is omitted on a motor, it defaults to the top-level "esp" (default: 1).
+# ==============================================================================
 CONFIG = {
   "runtime_motors": [
     {
-      "motor": 5, "dir": 1, "pulse": 1000,
+      "esp": 1, "motor": 5, "dir": 1, "pulse": 1000,
       "profile": {
         "A": {"duration_type": "pulse", "start": 0,   "end": 100, "brake_count": 30, "brake_ms": 5},
         "B": {"duration_type": "time",  "start": 300, "end": 400, "brake_count": 40, "brake_ms": 3}
       }
     },
-    {"motor": 2, "dir": 0, "pulse": 800, "profile": {}}
+    {"esp": 1, "motor": 2, "dir": 0, "pulse": 800, "profile": {}}
   ]
 }
 
@@ -44,6 +54,12 @@ DEFAULT_ESP_HOSTNAMES = {
     1: "esp32-robot-1.local",
     2: "esp32-robot-2.local",
     3: "esp32-robot-3.local"
+}
+ESP_BOARD_NAMES = {
+    1: "ESP #1 (Right Arm / Body)",
+    2: "ESP #2 (Left Arm / Body)",
+    3: "ESP #3 (Head / Gripper)",
+    4: "ESP #4 (Legs)"
 }
 
 
@@ -74,24 +90,33 @@ def validate_config(config: Dict[str, Any]) -> Tuple[bool, List[str]]:
     - window start < end
     - brake_count >= 0
     - duration_type in ('pulse', 'time')
+    - esp in (1, 2, 3, 4) if specified
     """
     errors: List[str] = []
     if "runtime_motors" not in config or not isinstance(config["runtime_motors"], list):
         errors.append("Config missing 'runtime_motors' list")
         return False, errors
 
+    top_esp = config.get("esp")
+    if top_esp is not None and (not isinstance(top_esp, int) or top_esp not in (1, 2, 3, 4)):
+        errors.append(f"Top-level 'esp' must be an integer between 1 and 4 (got {top_esp})")
+
     for idx, m in enumerate(config["runtime_motors"]):
+        m_esp = m.get("esp", top_esp)
+        if m_esp is not None and (not isinstance(m_esp, int) or m_esp not in (1, 2, 3, 4)):
+            errors.append(f"Motor[{idx}]: 'esp' must be an integer between 1 and 4 (got {m_esp})")
+
         m_id = m.get("motor")
         if not isinstance(m_id, int) or m_id < 1 or m_id > 6:
             errors.append(f"Motor[{idx}]: 'motor' must be an integer between 1 and 6 (got {m_id})")
 
         dir_val = m.get("dir")
         if dir_val not in (0, 1):
-            errors.append(f"Motor[{m_id}]: 'dir' must be 0 (CW) or 1 (CCW) (got {dir_val})")
+            errors.append(f"Motor[{idx} (ID {m_id})]: 'dir' must be 0 (CW) or 1 (CCW) (got {dir_val})")
 
         pulse = m.get("pulse")
         if not isinstance(pulse, int) or pulse <= 0:
-            errors.append(f"Motor[{m_id}]: 'pulse' must be an integer > 0 (got {pulse})")
+            errors.append(f"Motor[{idx} (ID {m_id})]: 'pulse' must be an integer > 0 (got {pulse})")
 
         profile = m.get("profile", {})
         if not isinstance(profile, dict):
@@ -155,14 +180,17 @@ def run_test(config: Dict[str, Any] = CONFIG, dry_run: bool = True, timeout: flo
     print(" COMPUTED BRAKE SCHEDULES PER MOTOR:")
     print("-" * 78)
 
-    for m in config["runtime_motors"]:
+    top_esp = config.get("esp", 1)
+    for idx, m in enumerate(config["runtime_motors"]):
         m_id = m["motor"]
+        m_esp = m.get("esp", top_esp)
+        board_name = ESP_BOARD_NAMES.get(m_esp, f"ESP #{m_esp}")
         dir_val = m["dir"]
         dir_name = "0 (CW / Forward)" if dir_val == 0 else "1 (CCW / Reverse)"
         pulse = m["pulse"]
         profile = m.get("profile", {})
 
-        print(f"\n> MOTOR {m_id}: Total Target Pulses = {pulse} | Direction = {dir_name}")
+        print(f"\n> MOTOR {m_id} on {board_name}: Total Target Pulses = {pulse} | Direction = {dir_name}")
         if not profile:
             print("    Profile: Empty / Default -> Normal run, full drive, no braking until target.")
             continue
@@ -225,32 +253,35 @@ def run_test(config: Dict[str, Any] = CONFIG, dry_run: bool = True, timeout: flo
         except Exception:
             pass
 
+    pending_targets = {(m.get("esp", top_esp), m["motor"]) for m in config["runtime_motors"]}
+    target_summary = [f"ESP#{esp}:M{m}" for (esp, m) in sorted(pending_targets)]
     print("[OK] Packet dispatched! Awaiting real-time completion/jam feedback...")
-    print(f"    Pending Motors: {[m['motor'] for m in config['runtime_motors']]}")
+    print(f"    Pending Targets : {target_summary}")
     print("-" * 78)
 
-    pending_motors = {m["motor"] for m in config["runtime_motors"]}
     start_time = time.time()
     success = True
 
-    while pending_motors and (time.time() - start_time < timeout):
+    while pending_targets and (time.time() - start_time < timeout):
         try:
             data, (addr, _) = sock.recvfrom(2048)
             text = data.decode("utf-8", errors="ignore").strip()
             pkt = json.loads(text)
 
             pkt_m = pkt.get("motor")
-            if pkt_m in pending_motors:
+            pkt_esp = pkt.get("esp", 1)
+            target_key = (pkt_esp, pkt_m)
+
+            if target_key in pending_targets:
                 status = pkt.get("status")
-                esp_id = pkt.get("esp", 1)
 
                 if status == "done":
                     pulses = pkt.get("pulses")
                     r_time = pkt.get("running_time_ms")
-                    print(f"\033[92m[DONE] Motor {pkt_m} (ESP #{esp_id} from {addr}):\033[0m")
+                    print(f"\033[92m[DONE] Motor {pkt_m} (ESP #{pkt_esp} from {addr}):\033[0m")
                     print(f"       Pulses Counted  : {pulses}")
                     print(f"       Driven Time     : {r_time} ms")
-                    pending_motors.remove(pkt_m)
+                    pending_targets.remove(target_key)
 
                 elif status == "error":
                     reason = pkt.get("reason", "unknown")
@@ -258,15 +289,15 @@ def run_test(config: Dict[str, Any] = CONFIG, dry_run: bool = True, timeout: flo
                         pulses = pkt.get("pulses")
                         r_time = pkt.get("running_time_ms")
                         sec = pkt.get("section")
-                        print(f"\033[91m[JAM ERROR] Motor {pkt_m} (ESP #{esp_id} from {addr}):\033[0m")
+                        print(f"\033[91m[JAM ERROR] Motor {pkt_m} (ESP #{pkt_esp} from {addr}):\033[0m")
                         print(f"            Reason          : {reason}")
                         print(f"            Pulses Counted  : {pulses}")
                         print(f"            Driven Time     : {r_time} ms")
                         print(f"            Section         : {sec}")
                     else:
                         msg = pkt.get("message", "")
-                        print(f"\033[91m[ERROR] Motor {pkt_m} (ESP #{esp_id} from {addr}): {reason} - {msg}\033[0m")
-                    pending_motors.remove(pkt_m)
+                        print(f"\033[91m[ERROR] Motor {pkt_m} (ESP #{pkt_esp} from {addr}): {reason} - {msg}\033[0m")
+                    pending_targets.remove(target_key)
                     success = False
 
         except socket.timeout:
@@ -274,8 +305,9 @@ def run_test(config: Dict[str, Any] = CONFIG, dry_run: bool = True, timeout: flo
         except Exception:
             continue
 
-    if pending_motors:
-        print(f"\033[93m[!] Timeout: No response received for motors: {list(pending_motors)}\033[0m")
+    if pending_targets:
+        missing = [f"ESP#{esp}:M{m}" for (esp, m) in sorted(pending_targets)]
+        print(f"\033[93m[!] Timeout: No response received for targets: {missing}\033[0m")
         success = False
 
     sock.close()
