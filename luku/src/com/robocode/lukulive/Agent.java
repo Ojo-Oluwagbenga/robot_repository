@@ -209,6 +209,32 @@ final class Agent {
                     instructionStatus = "Instruction URL returned HTTP " + r.code + (instruction != null ? " - using saved copy" : "");
                 }
             } catch (Exception e) {
+                // Address or port changed: attempt auto-discovery of active bridge!
+                String found = BridgeDiscovery.findWorkingBridge(prefs.getContext(), prefs);
+                if (found != null && !found.isEmpty()) {
+                    prefs.updateDiscoveredBridge(found);
+                    String retryUrl = prefs.rewriteBridgeUrl(prefs.instructionUrl());
+                    try {
+                        Map<String, String> h = new HashMap<String, String>();
+                        h.put("Accept", "text/plain,text/markdown,text/html;q=0.8,*/*;q=0.5");
+                        h.put("Cache-Control", "no-cache");
+                        Http.Resp r = Http.send("GET", retryUrl, h, null, 8000, 400000);
+                        if (r.code == 200 && r.body.trim().length() > 0) {
+                            String text = r.body;
+                            String ct = r.contentType == null ? "" : r.contentType.toLowerCase();
+                            String lower = text.toLowerCase();
+                            if (ct.contains("html") && (lower.contains("<html") || lower.contains("<body") || lower.contains("<div"))) {
+                                text = WebTools.htmlToText(text);
+                            }
+                            text = text.trim();
+                            instruction = text;
+                            instructionFetchedAt = now;
+                            prefs.put("instr_cache", text);
+                            instructionStatus = "Live instructions loaded via auto-discovery (" + text.length() + " chars)";
+                            return instruction;
+                        }
+                    } catch (Exception ignored) {}
+                }
                 instructionStatus = "Could not reach instruction URL" + (instruction != null ? " - using saved copy" : "");
             }
             return instruction;
@@ -1004,6 +1030,19 @@ final class Agent {
                 out.put("body", short1(r.body, 1200));
                 l.onToolResult("action", label, r.code >= 200 && r.code < 300);
             } catch (Exception e) {
+                // Port or IP may have changed: auto-discover active bridge & retry once
+                String found = BridgeDiscovery.findWorkingBridge(prefs.getContext(), prefs);
+                if (found != null && !found.isEmpty()) {
+                    try {
+                        String encVal = java.net.URLEncoder.encode(value, "UTF-8");
+                        String retryUrl = found + "/api/instruct?code=" + code + (value.length() > 0 ? "&value=" + encVal : "") + "&source=gemini_live";
+                        Http.Resp r = Http.send("GET", retryUrl, null, null, 8000, 20000);
+                        out.put("status", r.code);
+                        out.put("body", short1(r.body, 1200));
+                        l.onToolResult("action", label, r.code >= 200 && r.code < 300);
+                        return out;
+                    } catch (Exception ignored) {}
+                }
                 out.put("error", "Action dispatch failed: " + e.getMessage());
                 l.onToolResult("action", label, false);
             }
@@ -1013,7 +1052,7 @@ final class Agent {
             String url = prefs.rewriteBridgeUrl(rawUrl);
             String label = actionLabel(url);
             if (decision != null && !decision.approved) {
-                l.onTool("action", label + " \u2014 not confirmed");
+                l.onTool("action", label + " — not confirmed");
                 out.put("status", "not_executed");
                 out.put("reason", decision.reason);
                 if (decision.userReply != null) out.put("user_reply", decision.userReply);
@@ -1035,6 +1074,17 @@ final class Agent {
                 out.put("body", short1(r.body, 1200));
                 l.onToolResult("action", label, r.code >= 200 && r.code < 300);
             } catch (Exception e) {
+                String found = BridgeDiscovery.findWorkingBridge(prefs.getContext(), prefs);
+                if (found != null && !found.isEmpty()) {
+                    try {
+                        String retryUrl = prefs.rewriteBridgeUrl(rawUrl);
+                        Http.Resp r = Http.send("GET", retryUrl, null, null, 8000, 20000);
+                        out.put("status", r.code);
+                        out.put("body", short1(r.body, 1200));
+                        l.onToolResult("action", label, r.code >= 200 && r.code < 300);
+                        return out;
+                    } catch (Exception ignored) {}
+                }
                 out.put("error", "Request failed: " + e.getMessage());
                 l.onToolResult("action", label, false);
             }

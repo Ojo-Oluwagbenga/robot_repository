@@ -18,16 +18,20 @@ final class Prefs {
 
     static final String DEFAULT_GEMINI_KEY = defaultGeminiKey();
     static final String DEFAULT_MODEL = "gemini-3.8-flash";
-    static final String DEFAULT_BRIDGE_BASE = "http://10.208.131.172:3000";
+    static final String DEFAULT_BRIDGE_HOST = "10.36.113.172";
+    static final int DEFAULT_BRIDGE_PORT = 3000;
+    static final String DEFAULT_BRIDGE_BASE = "http://" + DEFAULT_BRIDGE_HOST + ":" + DEFAULT_BRIDGE_PORT;
     static final String DEFAULT_INSTRUCTION_URL = DEFAULT_BRIDGE_BASE + "/gemini";
     static final String DEFAULT_FAST_BASE = "https://api.groq.com/openai/v1";
     static final String DEFAULT_FAST_MODEL = "llama-3.3-70b-versatile";
 
     static final String PROVIDER_GEMINI = "gemini", PROVIDER_FAST = "fast", PROVIDER_LOCAL = "local";
 
+    private final Context ctx;
     private final SharedPreferences sp;
 
     Prefs(Context ctx) {
+        this.ctx = ctx != null ? ctx.getApplicationContext() : null;
         sp = ctx.getApplicationContext().getSharedPreferences("luku_prefs", Context.MODE_PRIVATE);
         // v6: back to full Gemini (Flash, not Flash-Lite); the PC and on-device engines are gone.
         if (!sp.getBoolean("migrated_v6_gemini", false)) {
@@ -46,10 +50,13 @@ final class Prefs {
         if (savedModel.contains("1.5-flash") || savedModel.contains("2.5-flash")) {
             sp.edit().putString("model", DEFAULT_MODEL).apply();
         }
-        // Migrate instruction URL to current local robot_bridge_site
+        // Migrate instruction URL to current local robot_bridge_site if on old dead IP
         String savedInstr = sp.getString("instr_url", "");
-        if (savedInstr.isEmpty() || savedInstr.contains("robocode-kappa.vercel.app") || savedInstr.contains("10.97.173.172")) {
-            sp.edit().putString("instr_url", DEFAULT_INSTRUCTION_URL).apply();
+        if (savedInstr.isEmpty() || savedInstr.contains("robocode-kappa.vercel.app") || savedInstr.contains("10.97.173.172") || savedInstr.contains("10.208.131.172")) {
+            sp.edit().putString("instr_url", DEFAULT_INSTRUCTION_URL)
+                     .putString("bridge_host", DEFAULT_BRIDGE_HOST)
+                     .putInt("bridge_port", DEFAULT_BRIDGE_PORT)
+                     .apply();
         }
     }
 
@@ -99,19 +106,88 @@ final class Prefs {
         return PROVIDER_LOCAL.equals(provider());
     }
 
+    Context getContext() { return ctx; }
+
+    int getInt(String key, int def) {
+        try { return sp.getInt(key, def); } catch (Exception e) { return def; }
+    }
+
+    void putInt(String key, int val) { sp.edit().putInt(key, val).apply(); }
+
     // --- instructions & local bridge routing
-    String instructionUrl() { return get("instr_url", DEFAULT_INSTRUCTION_URL).trim(); }
+    String bridgeHost() {
+        String h = get("bridge_host", "").trim();
+        if (h.length() > 0) return h;
+        String u = instructionUrl();
+        try {
+            java.net.URI uri = new java.net.URI(u);
+            if (uri.getHost() != null && uri.getHost().length() > 0) return uri.getHost();
+        } catch (Exception ignored) {}
+        return DEFAULT_BRIDGE_HOST;
+    }
+
+    int bridgePort() {
+        int p = getInt("bridge_port", 0);
+        if (p > 0) return p;
+        String u = instructionUrl();
+        try {
+            java.net.URI uri = new java.net.URI(u);
+            if (uri.getPort() > 0) return uri.getPort();
+        } catch (Exception ignored) {}
+        return DEFAULT_BRIDGE_PORT;
+    }
+
+    void setBridgeHostAndPort(String host, int port) {
+        if (host == null || host.trim().isEmpty() || host.trim().equalsIgnoreCase("auto")) {
+            host = DEFAULT_BRIDGE_HOST;
+        } else {
+            host = host.trim();
+        }
+        if (port <= 0) port = DEFAULT_BRIDGE_PORT;
+        put("bridge_host", host);
+        putInt("bridge_port", port);
+        String base = "http://" + host + ":" + port;
+        put("instr_url", base + "/gemini");
+    }
+
+    void updateDiscoveredBridge(String base) {
+        if (base == null || base.isEmpty()) return;
+        try {
+            while (base.endsWith("/")) base = base.substring(0, base.length() - 1);
+            java.net.URI uri = new java.net.URI(base);
+            String host = uri.getHost();
+            int port = uri.getPort() > 0 ? uri.getPort() : 3000;
+            if (host != null && !host.isEmpty()) {
+                put("bridge_host", host);
+                putInt("bridge_port", port);
+            }
+            put("instr_url", base + "/gemini");
+        } catch (Exception ignored) {
+            put("instr_url", base + "/gemini");
+        }
+    }
+
+    String instructionUrl() {
+        String u = get("instr_url", "").trim();
+        if (u.length() > 0) return u;
+        return localBridgeBase() + "/gemini";
+    }
 
     /** Returns base URL (protocol + host + port) for the local robot bridge site. */
     String localBridgeBase() {
+        String host = bridgeHost();
+        int port = bridgePort();
+        if (host != null && !host.isEmpty() && !host.equalsIgnoreCase("auto")) {
+            return "http://" + host + (port > 0 ? ":" + port : "");
+        }
         String u = instructionUrl();
         try {
             java.net.URI uri = new java.net.URI(u);
             String scheme = uri.getScheme() != null ? uri.getScheme() : "http";
-            String host = uri.getHost();
-            int port = uri.getPort();
-            if (host != null && host.length() > 0) {
-                return scheme + "://" + host + (port > 0 ? ":" + port : "");
+            String h = uri.getHost();
+            int p = uri.getPort();
+            if (h != null && h.length() > 0) {
+                return scheme + "://" + h + (p > 0 ? ":" + p : "");
             }
         } catch (Exception ignored) { }
         return DEFAULT_BRIDGE_BASE;
@@ -132,7 +208,7 @@ final class Prefs {
                      .replace("http://robocode-kappa.vercel.app", localBase);
         }
         // Force http for local IP / localhost to prevent SSL handshake errors on local dev servers
-        if (url.startsWith("https://") && (url.contains("localhost") || url.contains("127.0.0.1") || url.contains("10.") || url.contains("192.168.") || url.contains(":3000"))) {
+        if (url.startsWith("https://") && (url.contains("localhost") || url.contains("127.0.0.1") || url.contains("10.") || url.contains("192.168.") || url.contains(":") )) {
             url = "http://" + url.substring(8);
         }
         return url;

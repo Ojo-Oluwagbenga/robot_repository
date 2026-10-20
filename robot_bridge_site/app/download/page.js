@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import QRCode from "qrcode";
 
 export default function DownloadPage() {
-  const [origin, setOrigin] = useState("http://10.208.131.172:3000");
+  const [origin, setOrigin] = useState("http://10.36.113.172:3000");
   const [apkQr, setApkQr] = useState("");
   const [pageQr, setPageQr] = useState("");
   const [activeTab, setActiveTab] = useState("apk"); // "apk" | "page"

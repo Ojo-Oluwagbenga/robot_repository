@@ -32,6 +32,8 @@ public class SettingsActivity extends Activity {
     private Prefs prefs;
     private EditText minVolume, freeCodes, leadIn;
     private EditText geminiKey, model, fastKey, fastModel, fastBase, instrUrl, fbKey, fbUrl, rate, endpoint, pitch;
+    private EditText bridgeHost, bridgePort;
+    private Button autoDetect;
     private Spinner voiceSpinner;
     private TextToSpeech tts;
     private final List<String> voiceNames = new ArrayList<String>();
@@ -88,8 +90,15 @@ public class SettingsActivity extends Activity {
         fastModel = field(col, "Model", prefs.fastModel(), false);
         fastBase = field(col, "Base URL (any OpenAI-compatible API works)", prefs.fastBaseUrl(), false);
 
+        section(col, "Robot Bridge Connection (Address & Port)");
+        bridgeHost = field(col, "Bridge Host / IP (e.g. 10.36.113.172 or raspberrypi.local)", prefs.bridgeHost(), false);
+        bridgePort = field(col, "Bridge Port (e.g. 3000, 3001, 8080)", String.valueOf(prefs.bridgePort()), false);
+        bridgePort.setInputType(InputType.TYPE_CLASS_NUMBER);
+        autoDetect = button("Auto-detect Bridge (Scan Network & Ports)");
+        col.addView(autoDetect);
+
         section(col, "Live instructions");
-        instrUrl = field(col, "Instruction URL (re-fetched in the background every minute)", prefs.instructionUrl(), false);
+        instrUrl = field(col, "Instruction URL (auto-synced with host & port)", prefs.instructionUrl(), false);
         Button reload = button("Fetch & preview instructions");
         col.addView(reload);
 
@@ -189,6 +198,33 @@ public class SettingsActivity extends Activity {
         col.addView(output, op);
         output.setText("Tip: restrict your API keys to this app in their consoles.");
 
+        autoDetect.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                autoDetect.setEnabled(false);
+                autoDetect.setText("Scanning network & ports…");
+                output.setText("Scanning local network for active Robot Bridge (probing ports 3000, 3001, 8080, etc.)…");
+                BridgeDiscovery.discoverAsync(SettingsActivity.this, prefs, new BridgeDiscovery.DiscoveryCallback() {
+                    @Override public void onFound(final String host, final int port, final String fullUrl) {
+                        autoDetect.setEnabled(true);
+                        autoDetect.setText("Auto-detect Bridge (Scan Network & Ports)");
+                        bridgeHost.setText(host);
+                        bridgePort.setText(String.valueOf(port));
+                        instrUrl.setText(fullUrl + "/gemini");
+                        saveAll();
+                        String msg = "Connected! Found active Robot Bridge at:\n" + fullUrl + "\n\nHost set to: " + host + "\nPort set to: " + port;
+                        showResult("Bridge Auto-Detected", msg);
+                    }
+
+                    @Override public void onFailed() {
+                        autoDetect.setEnabled(true);
+                        autoDetect.setText("Auto-detect Bridge (Scan Network & Ports)");
+                        String msg = "No active Robot Bridge found on the local network.\n\nEnsure that 'robot_bridge_site' is running on your computer or Raspberry Pi, and that both the phone and robot are on the same Wi-Fi.";
+                        showResult("Bridge Discovery", msg);
+                    }
+                });
+            }
+        });
+
         save.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 saveAll();
@@ -241,6 +277,11 @@ public class SettingsActivity extends Activity {
         else if (id == 3) chosenProvider = Prefs.PROVIDER_FAST;
         prefs.put("provider", chosenProvider);
         prefs.put("unrestricted_codes", freeCodes.getText().toString().trim().toUpperCase(java.util.Locale.US));
+
+        String bh = bridgeHost.getText().toString().trim();
+        int bp = 3000;
+        try { bp = Integer.parseInt(bridgePort.getText().toString().trim()); } catch (Exception ignored) {}
+        prefs.setBridgeHostAndPort(bh, bp);
 
         prefs.put("gemini_key", geminiKey.getText().toString().trim());
         String m = model.getText().toString().trim();
