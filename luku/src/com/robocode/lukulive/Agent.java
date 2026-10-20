@@ -83,9 +83,14 @@ final class Agent {
         boolean onDevice;
     }
 
-    /** Which engine answers the next turn: "fast" (only when chosen in Settings) or "gemini". */
+    /** Which engine answers the next turn: "local", "fast" (only when chosen in Settings) or "gemini". */
     String engine() {
+        if (prefs.useLocalEngine()) return "local";
         return prefs.useFastEngine() ? "fast" : "gemini";
+    }
+
+    boolean isCodeUnrestricted(String code) {
+        return code != null && unrestrictedCodes().contains(code.toUpperCase(Locale.US));
     }
 
     private OaTarget fastTarget() {
@@ -164,6 +169,7 @@ final class Agent {
 
     String engineLabel() {
         String e = engine();
+        if ("local".equals(e)) return "Local AI (On-Device)";
         if ("fast".equals(e)) return prefs.fastModel() + " (" + WebTools.hostOf(prefs.fastBaseUrl()) + ")";
         return geminiModel != null ? geminiModel : prefs.model();
     }
@@ -291,6 +297,7 @@ final class Agent {
                 try {
                     Map<String, String> h = new HashMap<String, String>();
                     String e = engine();
+                    if ("local".equals(e)) return;
                     if ("fast".equals(e)) {
                         h.put("Authorization", "Bearer " + prefs.fastKey());
                         Http.send("GET", prefs.fastBaseUrl() + "/models", h, null, 10000, 300000);
@@ -317,7 +324,10 @@ final class Agent {
         Listener tracking = track(l, streamed);
         String reply = null;
         String engine = engine();
-        if ("fast".equals(engine) && System.currentTimeMillis() >= fastBlockedUntil) {
+        if ("local".equals(engine)) {
+            reply = LocalBrain.respond(sys, userText, tracking, prefs, turns, this);
+            lastEngine = "Local AI (On-Device)";
+        } else if ("fast".equals(engine) && System.currentTimeMillis() >= fastBlockedUntil) {
             try {
                 reply = respondOpenAi(sys, userText, tracking, fastTarget());
                 lastEngine = prefs.fastModel();
@@ -966,7 +976,7 @@ final class Agent {
         return a;
     }
 
-    private JSONObject runTool(String name, JSONObject args, Listener l, Confirmation decision) throws JSONException {
+    JSONObject runTool(String name, JSONObject args, Listener l, Confirmation decision) throws JSONException {
         JSONObject out = new JSONObject();
         if ("robot_action".equals(name)) {
             String code = args.optString("code", "").trim().toUpperCase(Locale.US);

@@ -62,10 +62,22 @@ public class SettingsActivity extends Activity {
 
         section(col, "AI engine");
         provider = new RadioGroup(this);
-        provider.addView(radio(2, "Gemini (default \u2014 streamed, low-latency)"));
+        provider.addView(radio(1, "Local AI (On-Device \u2014 lightweight, 100% offline, zero latency, no key needed)"));
+        provider.addView(radio(2, "Gemini (default \u2014 streamed, multimodal cloud AI)"));
         provider.addView(radio(3, "Fast cloud engine (Groq / OpenAI-compatible, needs a key)"));
-        provider.check(Prefs.PROVIDER_FAST.equals(prefs.provider()) ? 3 : 2);
+        int checkedId = 2;
+        if (Prefs.PROVIDER_LOCAL.equals(prefs.provider())) checkedId = 1;
+        else if (Prefs.PROVIDER_FAST.equals(prefs.provider())) checkedId = 3;
+        provider.check(checkedId);
         col.addView(provider);
+
+        section(col, "Local AI (On-Device)");
+        TextView localDesc = new TextView(this);
+        localDesc.setText("Runs 100% locally on the phone's CPU. Supports all physical robot movements (wave, nod, turn, stop, step), greetings, status diagnostics, time & math, completely offline.");
+        localDesc.setTextColor(MUTED);
+        localDesc.setTextSize(13);
+        localDesc.setPadding(0, dp(4), 0, dp(4));
+        col.addView(localDesc);
 
         section(col, "Gemini");
         geminiKey = field(col, "API key", prefs.geminiKey(), true);
@@ -224,7 +236,10 @@ public class SettingsActivity extends Activity {
 
     private void saveAll() {
         int id = provider.getCheckedRadioButtonId();
-        prefs.put("provider", id == 3 ? Prefs.PROVIDER_FAST : Prefs.PROVIDER_GEMINI);
+        String chosenProvider = Prefs.PROVIDER_GEMINI;
+        if (id == 1) chosenProvider = Prefs.PROVIDER_LOCAL;
+        else if (id == 3) chosenProvider = Prefs.PROVIDER_FAST;
+        prefs.put("provider", chosenProvider);
         prefs.put("unrestricted_codes", freeCodes.getText().toString().trim().toUpperCase(java.util.Locale.US));
 
         prefs.put("gemini_key", geminiKey.getText().toString().trim());

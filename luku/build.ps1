@@ -26,7 +26,7 @@ if ($LASTEXITCODE -ne 0) { throw "aapt2 compile failed" }
 
 Write-Host "== aapt2 link =="
 & $AAPT2 link -I $ANDROID_JAR --manifest "$SCRIPT_DIR\AndroidManifest.xml" `
-  --min-sdk-version 26 --target-sdk-version 34 --version-code 10 --version-name 6.3 `
+  --min-sdk-version 26 --target-sdk-version 34 --version-code 11 --version-name 6.4 `
   --java "$OUT\gen" -o "$OUT\base.apk" "$OUT\compiled\res.zip"
 if ($LASTEXITCODE -ne 0) { throw "aapt2 link failed" }
 
