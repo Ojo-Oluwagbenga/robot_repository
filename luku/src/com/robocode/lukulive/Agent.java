@@ -90,6 +90,9 @@ final class Agent {
     }
 
     boolean isCodeUnrestricted(String code) {
+        if ("GENTLE_HEAD".equals(code) || "HEAD_GREET".equals(code) || "STOP".equals(code) || "SPEAK".equals(code)) {
+            return true;
+        }
         return code != null && unrestrictedCodes().contains(code.toUpperCase(Locale.US));
     }
 
@@ -991,6 +994,9 @@ final class Agent {
         } else if (code.equals("WAVE_HAND")) {
             a.doWhat = "wave my hand" + (num && !"1".equals(value) ? " " + value + " times" : "");
             a.doing = "waving my hand";
+        } else if (code.equals("GENTLE_HEAD") || code.equals("HEAD_GREET") || code.equals("HEAD_OSCILLATE")) {
+            a.doWhat = "gently turn my head back and forth";
+            a.doing = "turning my head gently";
         } else if (code.equals("PICK_BALL") || code.startsWith("PICK_BALL_")) {
             String col = (value != null && !value.isEmpty() && !"1".equals(value)) ? value : "target";
             a.doWhat = "visually track and pick up the " + col + " ball with my arm";

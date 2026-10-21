@@ -41,6 +41,11 @@ CODE_TO_FILE: Dict[str, str] = {
     "NOD_DOWN": str(ACTIONS_DIR / "nod_down.py"),
     "TURN_LEFT": str(ACTIONS_DIR / "turn_left.py"),
     "TURN_RIGHT": str(ACTIONS_DIR / "turn_right.py"),
+    "GENTLE_HEAD": str(ACTIONS_DIR / "gentle_head.py"),
+    "HEAD_GREET": str(ACTIONS_DIR / "gentle_head.py"),
+    "HEAD_OSCILLATE": str(ACTIONS_DIR / "gentle_head.py"),
+    "GREET": str(ACTIONS_DIR / "gentle_head.py"),
+    "INTRODUCE": str(ACTIONS_DIR / "gentle_head.py"),
 
     # Arm & Greeting Gestures
     "WAVE": str(ACTIONS_DIR / "wave.py"),

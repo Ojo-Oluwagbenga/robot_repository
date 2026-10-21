@@ -30,6 +30,10 @@ FILES_TO_SYNC = [
     ("robot/run_pick_ball.sh", "run_pick_ball.sh"),
     ("robot/bridge/actions/pick_ball.py", "bridge/actions/pick_ball.py"),
     ("robot/bridge/code_mappings.py", "bridge/code_mappings.py"),
+    ("robot/bridge/executor.py", "bridge/executor.py"),
+    ("robot/control/gentle_head.py", "control/gentle_head.py"),
+    ("robot/bridge/actions/gentle_head.py", "bridge/actions/gentle_head.py"),
+    ("robot/tests/test_gentle_head.py", "tests/test_gentle_head.py"),
     ("robot/tests/test_visual_servo_arm.py", "tests/test_visual_servo_arm.py"),
 ]
 

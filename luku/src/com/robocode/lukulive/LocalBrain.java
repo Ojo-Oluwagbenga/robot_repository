@@ -45,6 +45,24 @@ final class LocalBrain {
         }
 
         // 2. Conversational reasoning & knowledge base
+        boolean isGreetingOrIntro = matchesAny(lower,
+                "hello", "hi", "hey", "good morning", "good afternoon", "good evening", "greetings", "yo",
+                "who are you", "what is your name", "what are you", "introduce yourself", "tell me about yourself"
+        );
+        if (isGreetingOrIntro) {
+            // Asynchronously dispatch gentle head turn back and forth while vocalizing
+            new Thread(new Runnable() {
+                @Override public void run() {
+                    try {
+                        org.json.JSONObject args = new org.json.JSONObject();
+                        args.put("code", "GENTLE_HEAD");
+                        args.put("value", "1");
+                        agent.runTool("robot_action", args, listener, new Agent.Confirmation(true, "greeting", null));
+                    } catch (Exception ignored) {}
+                }
+            }, "gentle-head-thread").start();
+        }
+
         String reply = generateConversationalReply(clean, lower, turns);
         streamText(reply, listener);
         return reply;

@@ -24,6 +24,14 @@ from .config import (
 from .storage import InstructionStorage
 from .code_mappings import resolve_action_file
 
+try:
+    from robot.control.gentle_head import IdleHeadManager
+except ImportError:
+    try:
+        from control.gentle_head import IdleHeadManager
+    except ImportError:
+        IdleHeadManager = None
+
 
 class LocalInstructionExecutor:
     """
@@ -45,6 +53,7 @@ class LocalInstructionExecutor:
         self.timeout_seconds = timeout_seconds
         self.on_completed_callback = on_completed_callback
 
+        self.idle_manager = IdleHeadManager.get_instance() if IdleHeadManager else None
         self._running = False
         self._thread: Optional[threading.Thread] = None
 
@@ -83,64 +92,71 @@ class LocalInstructionExecutor:
         print(f"    Timestamp: {instruction.get('timestamp')}")
         print("-" * 68)
 
-        # 1. Look up the file defined to run for this code
-        target_file = resolve_action_file(code)
-        if not target_file:
-            print(f"[!] [Executor] No action file defined or found for code '{code}'.")
-            return False
+        if self.idle_manager:
+            self.idle_manager.set_busy(True)
 
-        print(f"[+] [Executor] Matched action file: {target_file}")
-        print(f"[*] [Executor] Spawning process...")
-
-        # 2. Prepare environment and CLI arguments for the target file
-        env = os.environ.copy()
-        env["ROBOT_CODE"] = code
-        env["ROBOT_VALUE"] = val
-        env["ROBOT_INSTRUCTION_ID"] = inst_id
-
-        cmd = [
-            sys.executable,
-            str(target_file),
-            code,
-            val,
-            inst_id,
-            json.dumps(instruction),
-        ]
-
-        # 3. Run target file and wait for it to complete
-        start_time = time.time()
         try:
-            result = subprocess.run(
-                cmd,
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=self.timeout_seconds,
-            )
-            elapsed = time.time() - start_time
-
-            # Print standard output from the action file
-            if result.stdout.strip():
-                print(f"--- Action Output ({target_file.name}) ---")
-                print(result.stdout.strip())
-                print("------------------------------------------")
-
-            if result.stderr.strip():
-                print(f"[!] Action Stderr:\n{result.stderr.strip()}")
-
-            if result.returncode == 0:
-                print(f"[OK] [Executor] Action file ran completely in {elapsed:.2f}s (Exit code 0).")
-                return True
-            else:
-                print(f"[FAIL] [Executor] Action file failed with exit code {result.returncode}.")
+            # 1. Look up the file defined to run for this code
+            target_file = resolve_action_file(code)
+            if not target_file:
+                print(f"[!] [Executor] No action file defined or found for code '{code}'.")
                 return False
 
-        except subprocess.TimeoutExpired:
-            print(f"[ERROR] [Executor] Action file timed out after {self.timeout_seconds}s.")
-            return False
-        except Exception as e:
-            print(f"[ERROR] [Executor] Failed to launch action process: {e}")
-            return False
+            print(f"[+] [Executor] Matched action file: {target_file}")
+            print(f"[*] [Executor] Spawning process...")
+
+            # 2. Prepare environment and CLI arguments for the target file
+            env = os.environ.copy()
+            env["ROBOT_CODE"] = code
+            env["ROBOT_VALUE"] = val
+            env["ROBOT_INSTRUCTION_ID"] = inst_id
+
+            cmd = [
+                sys.executable,
+                str(target_file),
+                code,
+                val,
+                inst_id,
+                json.dumps(instruction),
+            ]
+
+            # 3. Run target file and wait for it to complete
+            start_time = time.time()
+            try:
+                result = subprocess.run(
+                    cmd,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=self.timeout_seconds,
+                )
+                elapsed = time.time() - start_time
+
+                # Print standard output from the action file
+                if result.stdout.strip():
+                    print(f"--- Action Output ({target_file.name}) ---")
+                    print(result.stdout.strip())
+                    print("------------------------------------------")
+
+                if result.stderr.strip():
+                    print(f"[!] Action Stderr:\n{result.stderr.strip()}")
+
+                if result.returncode == 0:
+                    print(f"[OK] [Executor] Action file ran completely in {elapsed:.2f}s (Exit code 0).")
+                    return True
+                else:
+                    print(f"[FAIL] [Executor] Action file failed with exit code {result.returncode}.")
+                    return False
+
+            except subprocess.TimeoutExpired:
+                print(f"[ERROR] [Executor] Action file timed out after {self.timeout_seconds}s.")
+                return False
+            except Exception as e:
+                print(f"[ERROR] [Executor] Failed to launch action process: {e}")
+                return False
+        finally:
+            if self.idle_manager:
+                self.idle_manager.set_busy(False)
 
     def process_next(self) -> bool:
         """
@@ -201,6 +217,8 @@ class LocalInstructionExecutor:
         """Start executor in a background thread."""
         if self._thread and self._thread.is_alive():
             return
+        if self.idle_manager:
+            self.idle_manager.start()
         self._running = True
         self._thread = threading.Thread(target=self.run_loop, daemon=True, name="BridgeExecutorThread")
         self._thread.start()
@@ -208,6 +226,8 @@ class LocalInstructionExecutor:
     def stop(self) -> None:
         """Stop background execution thread."""
         self._running = False
+        if self.idle_manager:
+            self.idle_manager.stop()
         if self._thread:
             self._thread.join(timeout=2.0)
             self._thread = None
