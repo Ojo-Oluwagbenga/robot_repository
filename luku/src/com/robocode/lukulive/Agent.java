@@ -991,6 +991,13 @@ final class Agent {
         } else if (code.equals("WAVE_HAND")) {
             a.doWhat = "wave my hand" + (num && !"1".equals(value) ? " " + value + " times" : "");
             a.doing = "waving my hand";
+        } else if (code.equals("PICK_BALL") || code.startsWith("PICK_BALL_")) {
+            String col = (value != null && !value.isEmpty() && !"1".equals(value)) ? value : "target";
+            a.doWhat = "visually track and pick up the " + col + " ball with my arm";
+            a.doing = "tracking and picking up the " + col + " ball";
+        } else if (code.equals("PICK") || code.equals("PICK_UP")) {
+            a.doWhat = "pick up the object on the table with my arm";
+            a.doing = "picking up the object";
         } else if (code.equals("SPEAK")) {
             a.doWhat = "say \"" + (value == null ? "" : value) + "\" through my speaker";
             a.doing = "saying it through my speaker";

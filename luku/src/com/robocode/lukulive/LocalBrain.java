@@ -96,6 +96,17 @@ final class LocalBrain {
             code = "STEP_FORWARD";
             val = "1";
             speech = "Taking a step forward.";
+        } else if (lower.contains("pick") && (lower.contains("ball") || lower.contains("object") || lower.contains("it up"))) {
+            String targetColor = "red";
+            if (lower.contains("green")) targetColor = "green";
+            else if (lower.contains("blue")) targetColor = "blue";
+            else if (lower.contains("yellow")) targetColor = "yellow";
+            else if (lower.contains("orange")) targetColor = "orange";
+            else if (lower.contains("purple")) targetColor = "purple";
+
+            code = "PICK_BALL";
+            val = targetColor;
+            speech = "Tracking and picking up the " + targetColor + " ball.";
         } else if (lower.contains("track hand") || lower.contains("track ball") || lower.contains("find ball") || lower.contains("grasp")) {
             code = "TRACK_BALL";
             val = "1";

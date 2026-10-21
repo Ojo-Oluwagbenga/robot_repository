@@ -25,6 +25,12 @@ FILES_TO_SYNC = [
     ("robot/track_hand_ball.py", "track_hand_ball.py"),
     ("robot/run_hand_ball.sh", "run_hand_ball.sh"),
     ("robot/tests/test_hand_ball_grasp.py", "tests/test_hand_ball_grasp.py"),
+    ("robot/control/visual_servo_arm.py", "control/visual_servo_arm.py"),
+    ("robot/track_and_pick_ball.py", "track_and_pick_ball.py"),
+    ("robot/run_pick_ball.sh", "run_pick_ball.sh"),
+    ("robot/bridge/actions/pick_ball.py", "bridge/actions/pick_ball.py"),
+    ("robot/bridge/code_mappings.py", "bridge/code_mappings.py"),
+    ("robot/tests/test_visual_servo_arm.py", "tests/test_visual_servo_arm.py"),
 ]
 
 

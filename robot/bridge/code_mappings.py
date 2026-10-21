@@ -47,6 +47,13 @@ CODE_TO_FILE: Dict[str, str] = {
     "WAVE_HAND": str(ACTIONS_DIR / "wave.py"),
     "PICK": str(ACTIONS_DIR / "pick.py"),
     "PICK_UP": str(ACTIONS_DIR / "pick.py"),
+    "PICK_BALL": str(ACTIONS_DIR / "pick_ball.py"),
+    "PICK_RED_BALL": str(ACTIONS_DIR / "pick_ball.py"),
+    "PICK_GREEN_BALL": str(ACTIONS_DIR / "pick_ball.py"),
+    "PICK_BLUE_BALL": str(ACTIONS_DIR / "pick_ball.py"),
+    "PICK_YELLOW_BALL": str(ACTIONS_DIR / "pick_ball.py"),
+    "PICK_OBJECT": str(ACTIONS_DIR / "pick_ball.py"),
+    "VISUAL_PICK": str(ACTIONS_DIR / "pick_ball.py"),
 
     # Emergency / Motor Stop
     "STOP": str(ACTIONS_DIR / "stop.py"),
@@ -95,12 +102,16 @@ def resolve_action_file(code: str) -> Optional[Path]:
                 target_path_str = path
                 break
 
-    # 2. Prefix match (e.g. M2_20, N1_-20, E1_M4_20)
+    # 2. Prefix match (e.g. M2_20, N1_-20, E1_M4_20, PICK_BALL_RED)
     if not target_path_str:
-        for prefix in ["M2", "N1", "N2", "E1", "E2", "E3", "E4", "E5"]:
-            if clean_code.startswith(prefix):
-                target_path_str = CODE_TO_FILE.get(prefix) or CODE_TO_FILE.get("M2")
-                break
+        if clean_code.startswith("PICK_BALL") or clean_code.startswith("PICK_"):
+            target_path_str = CODE_TO_FILE.get("PICK_BALL")
+
+        if not target_path_str:
+            for prefix in ["M2", "N1", "N2", "E1", "E2", "E3", "E4", "E5"]:
+                if clean_code.startswith(prefix):
+                    target_path_str = CODE_TO_FILE.get(prefix) or CODE_TO_FILE.get("M2")
+                    break
 
     # 3. Fallback to DEFAULT
     if not target_path_str:
