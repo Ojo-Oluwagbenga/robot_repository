@@ -85,6 +85,7 @@ JOINT_ELBOW_FB = (1, 3)       # Flexion / extension
 JOINT_WRIST_ROT = (1, 4)      # Ulna rotation
 JOINT_WRIST_PITCH = (1, 2)    # Palm towards / away
 JOINT_GRIPPER = (3, 2)        # Fingers
+JOINT_HEAD_YAW = (1, 5)       # Head Yaw Left/Right (1-5-x-x)
 
 MIN_NOTICEABLE_PULSES = 100   # Motors show noticeable motion starting from 100 pulses
 CONFIDENT_MAX_PULSES = 200    # Only allowed when joint certainty score >= 0.7
@@ -92,6 +93,12 @@ STEP_INCREMENT = 30           # Increment step when movement produces no change
 
 DIR_CW = 0
 DIR_CCW = 1
+
+# Head Yaw Directions & Limits
+DIR_YAW_RIGHT = 0             # Rotate Right (+ pulses)
+DIR_YAW_LEFT = 1              # Rotate Left (- pulses)
+MAX_HEAD_SCAN_PULSES = 1000   # Scan range: [-1000, +1000] pulses from center
+HEAD_SCAN_STEP = 200          # Pulses per scan step
 
 # Table height safety parameters (in camera pixel coordinates: row 0 is top, higher y is lower down)
 DEFAULT_TABLE_ROW_LIMIT = 600   # Maximum pixel Y: beyond this is table collision zone
@@ -178,8 +185,9 @@ class VisualServoArmController:
             JOINT_WRIST_PITCH: JointModel("Wrist Pitch (1-2)", default_axis=(0.0, 10.0, 0.0)),
         }
 
-        # Arm state
+        # Arm & Head state
         self.current_pose_name = "RELAXED"
+        self.current_head_yaw = 0  # Net yaw pulses from central home position (1-5-x-x)
         self._init_vision()
 
     def _init_vision(self):
@@ -346,6 +354,131 @@ class VisualServoArmController:
         return self.dispatch_moves(moves, timeout=4.0)
 
     # =========================================================================
+    # HEAD YAW CONTROL & VISUAL SCANNING (1-5-x-x)
+    # =========================================================================
+    def move_head_yaw(self, pulses: int, direction: int) -> bool:
+        """
+        Moves head yaw motor 1-5-x-x and tracks net pulse position from center (home=0).
+        direction: 0 = RIGHT (+ pulses), 1 = LEFT (- pulses)
+        """
+        cmd_dir_name = "RIGHT" if direction == DIR_YAW_RIGHT else "LEFT"
+        print(f"[*] Moving head yaw: {pulses} pulses {cmd_dir_name} (1-5-{pulses}-{direction})...")
+        ok = self.dispatch_moves([(JOINT_HEAD_YAW[0], JOINT_HEAD_YAW[1], pulses, direction)], timeout=3.0)
+        if ok:
+            if direction == DIR_YAW_RIGHT:
+                self.current_head_yaw += pulses
+            else:
+                self.current_head_yaw -= pulses
+            logger.info(f"Head yaw net position from center: {self.current_head_yaw} pulses")
+        time.sleep(0.15)
+        return ok
+
+    def return_head_to_center(self) -> bool:
+        """Returns head yaw (1-5-x-x) back to central home position (0 net pulses)."""
+        if self.current_head_yaw == 0:
+            print("[*] Head is at central home position.")
+            return True
+
+        pulses = abs(self.current_head_yaw)
+        direction = DIR_YAW_LEFT if self.current_head_yaw > 0 else DIR_YAW_RIGHT
+        dir_name = "LEFT" if direction == DIR_YAW_LEFT else "RIGHT"
+        print(f"[*] Returning head to central home: {pulses} pulses {dir_name} (1-5-{pulses}-{direction})...")
+        ok = self.dispatch_moves([(JOINT_HEAD_YAW[0], JOINT_HEAD_YAW[1], pulses, direction)], timeout=4.0)
+        if ok:
+            self.current_head_yaw = 0
+            print("[*] Head cleanly centered at home (0 net pulses).")
+        time.sleep(0.2)
+        return ok
+
+    def is_target_ball_in_frame(self, num_samples: int = 3) -> Tuple[bool, Optional[Dict[str, Any]]]:
+        """
+        Samples stereo camera frames to check if the target color ball is currently visible.
+        Returns: (is_visible: bool, ball_info: dict or None)
+        """
+        if self.simulation:
+            # In simulation, synthesize detection
+            return True, {"x": 350.0, "y": 420.0, "z_cm": 35.0, "radius": 24.0, "live": True}
+
+        for _ in range(num_samples):
+            left_eye, right_eye = self.read_stereo_frame()
+            if left_eye is not None and right_eye is not None and self.tracker is not None:
+                res: GraspResult = self.tracker.process_stereo_frame(left_eye, right_eye)
+                if res.ball and res.ball.get("live"):
+                    return True, res.ball
+            time.sleep(0.08)
+
+        return False, None
+
+    def scan_and_locate_ball(self) -> bool:
+        """
+        Initial sight check and head search scan within [-1000, +1000] pulses (1-5-x-x):
+          1. If ball is in frame:
+             Vocalizes: 'I can see the <color> ball, fetching it now.'
+             Returns True immediately.
+          2. If ball is NOT in frame:
+             Vocalizes: 'I cannot see the <color> ball, but I will check around.'
+             Rotates head yaw (1-5) within + or - 1000 pulses.
+          3. When it sees the ball during scanning:
+             Pauses head immediately at that angle.
+             Vocalizes: 'I can see the <color> ball, fetching it now.'
+             Returns True to begin picking.
+          4. If after scanning the entire range it is still not found:
+             Returns head to central home position.
+             Vocalizes: 'The <color> ball is not in sight.'
+             Returns False.
+        """
+        print("\n" + "=" * 65)
+        print(f"[*] INITIAL SIGHT CHECK FOR {self.ball_color.upper()} BALL...")
+        print("=" * 65)
+
+        # 1. Check if ball is already in frame
+        seen, ball_info = self.is_target_ball_in_frame(num_samples=4)
+        if seen:
+            msg = f"I can see the {self.ball_color} ball, fetching it now."
+            print(f"[+] BALL IN SIGHT: {msg}")
+            speak_to_phone(msg)
+            return True
+
+        # 2. Not in frame -> Announce head check
+        msg_search = f"I cannot see the {self.ball_color} ball, but I will check around."
+        print(f"[-] BALL NOT IN INITIAL FRAME: {msg_search}")
+        speak_to_phone(msg_search)
+
+        # 3. Rotate head within + or - 1000 pulses from center
+        print(f"[*] Starting head scan with 1-5-x-x within [{-MAX_HEAD_SCAN_PULSES}, +{MAX_HEAD_SCAN_PULSES}] pulses...")
+
+        # --- Phase A: Scan Right from center to +1000 pulses ---
+        while self.current_head_yaw < MAX_HEAD_SCAN_PULSES:
+            step = min(HEAD_SCAN_STEP, MAX_HEAD_SCAN_PULSES - self.current_head_yaw)
+            self.move_head_yaw(pulses=step, direction=DIR_YAW_RIGHT)
+            seen, ball_info = self.is_target_ball_in_frame(num_samples=3)
+            if seen:
+                print(f"\n[+] TARGET {self.ball_color.upper()} BALL SPOTTED DURING RIGHT SCAN AT YAW={self.current_head_yaw}!")
+                print("    Pausing head motion immediately and commencing pick...")
+                speak_to_phone(f"I can see the {self.ball_color} ball, fetching it now.")
+                return True
+
+        # --- Phase B: Scan Left from +1000 across center down to -1000 pulses ---
+        print("[*] Reached right limit (+1000). Sweeping head left down to -1000 pulses...")
+        while self.current_head_yaw > -MAX_HEAD_SCAN_PULSES:
+            step = min(HEAD_SCAN_STEP, self.current_head_yaw - (-MAX_HEAD_SCAN_PULSES))
+            self.move_head_yaw(pulses=step, direction=DIR_YAW_LEFT)
+            seen, ball_info = self.is_target_ball_in_frame(num_samples=3)
+            if seen:
+                print(f"\n[+] TARGET {self.ball_color.upper()} BALL SPOTTED DURING LEFT SCAN AT YAW={self.current_head_yaw}!")
+                print("    Pausing head motion immediately and commencing pick...")
+                speak_to_phone(f"I can see the {self.ball_color} ball, fetching it now.")
+                return True
+
+        # --- Phase C: Not found after full scan -> Return home & report ---
+        print("\n[!] Full head sweep completed: ball was not detected.")
+        self.return_head_to_center()
+        msg_not_found = f"The {self.ball_color} ball is not in sight."
+        print(f"[-] {msg_not_found}")
+        speak_to_phone(msg_not_found)
+        return False
+
+    # =========================================================================
     # TABLE HEIGHT SAFETY GUARD
     # =========================================================================
     def filter_downward_moves_at_table_level(
@@ -407,6 +540,12 @@ class VisualServoArmController:
 
         if not self.open_camera():
             print("[ERROR] Camera initialization failed.")
+            return False
+
+        # Step 0: Initial Sight Check & Head Search Scan if not in view
+        ball_located = self.scan_and_locate_ball()
+        if not ball_located:
+            print(f"[!] {self.ball_color.capitalize()} ball not found. Pick procedure ended safely.")
             return False
 
         for attempt in range(1, max_attempts + 1):
@@ -625,6 +764,7 @@ class VisualServoArmController:
                     print("=" * 70)
                     # Voice out loud through phone app speaker
                     speak_to_phone("Ball is now picked")
+                    self.return_head_to_center()
                     return True
                 else:
                     print("\n[!] Pick verification failed: ball did not move with hand!")
@@ -637,6 +777,7 @@ class VisualServoArmController:
 
         print("\n[!] Visual servo pick reached maximum attempts without success.")
         self.move_to_relaxed_pose()
+        self.return_head_to_center()
         return False
 
 

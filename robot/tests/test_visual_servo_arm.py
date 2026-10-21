@@ -85,6 +85,51 @@ def test_joint_model_uncertainty_learning():
     assert model.certainty >= 0.70
 
 
+def test_head_yaw_scanning_and_sight_check():
+    """Verify head yaw movements, net position tracking, centering, and scan routines."""
+    controller = VisualServoArmController(ball_color="red", simulation=True)
+    assert controller.current_head_yaw == 0
+
+    # 1. Test move head right
+    controller.move_head_yaw(pulses=200, direction=0)
+    assert controller.current_head_yaw == 200
+
+    # 2. Test move head left
+    controller.move_head_yaw(pulses=400, direction=1)
+    assert controller.current_head_yaw == -200
+
+    # 3. Test return head to center
+    controller.return_head_to_center()
+    assert controller.current_head_yaw == 0
+
+    # 4. Test sight check when ball is immediately in frame
+    seen = controller.scan_and_locate_ball()
+    assert seen is True
+
+    # 5. Test scan sweep when ball is not in initial frame, but spotted during scan
+    call_count = [0]
+    def mock_is_target_in_frame(num_samples=3):
+        call_count[0] += 1
+        # False for initial check, True on 2nd step of right scan
+        if call_count[0] <= 1:
+            return False, None
+        return True, {"x": 350.0, "y": 420.0, "z_cm": 35.0, "radius": 24.0, "live": True}
+
+    controller.is_target_ball_in_frame = mock_is_target_in_frame
+    controller.current_head_yaw = 0
+    spotted = controller.scan_and_locate_ball()
+    assert spotted is True
+    # Head must be paused at the angle where ball was found!
+    assert controller.current_head_yaw > 0
+
+    # 6. Test full scan sweep when ball is completely absent: returns home and reports not in sight
+    controller.is_target_ball_in_frame = lambda num_samples=3: (False, None)
+    controller.current_head_yaw = 0
+    found = controller.scan_and_locate_ball()
+    assert found is False
+    assert controller.current_head_yaw == 0, "Head must return to central home (0) after full unsuccessful scan!"
+
+
 def test_simulated_pick_execution():
     """Verify full pick flow in simulation mode."""
     controller = VisualServoArmController(ball_color="red", simulation=True)
@@ -96,5 +141,6 @@ if __name__ == "__main__":
     test_motor_assignments()
     test_table_height_safety_guard()
     test_joint_model_uncertainty_learning()
+    test_head_yaw_scanning_and_sight_check()
     test_simulated_pick_execution()
     print("\n[ALL TESTS PASSED SUCCESSFULLY!]")
