@@ -12,7 +12,6 @@ Verifies:
 
 import sys
 from pathlib import Path
-import pytest
 
 ROBOT_DIR = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = ROBOT_DIR.parent

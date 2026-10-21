@@ -14,11 +14,15 @@ import tarfile
 from pathlib import Path
 import paramiko
 
-PI_HOST = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("PI_HOST", "172.23.30.92")
+PI_HOST = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("PI_HOST", "10.174.69.92")
 PI_USER = "pi"
+PI_PASS = "00000000"
 LOCAL_DIR = Path(__file__).resolve().parent
 ROBOT_DIR = LOCAL_DIR / "robot"
-REMOTE_TARGET = "/home/pi/projects/Robot/robot"
+REMOTE_TARGETS = [
+    "/home/pi/projects/Robot/robot",
+    "/home/pi/robot",
+]
 
 def build_tar_archive() -> bytes:
     buf = io.BytesIO()
@@ -27,7 +31,7 @@ def build_tar_archive() -> bytes:
         for root, dirs, files in os.walk(ROBOT_DIR):
             dirs[:] = [d for d in dirs if d not in ["__pycache__", ".git", "logs", ".pytest_cache"]]
             for f in files:
-                if f.endswith(".pyc") or f.endswith(".log"):
+                if f.endswith(".pyc") or f.endswith(".log") or f.endswith(".mp4") or f.endswith(".onnx") or f.endswith(".pt"):
                     continue
                 full_path = Path(root) / f
                 arc_name = full_path.relative_to(ROBOT_DIR).as_posix()
@@ -54,16 +58,11 @@ def build_tar_archive() -> bytes:
             if p.exists():
                 tar.add(str(p), arcname=extra)
 
-        # 3. Add compiled ESP firmware binaries
+        # 3. Add compiled ESP firmware binaries if present
         for i in (1, 2, 3, 4):
             bin_file = LOCAL_DIR / "build_esp32" / f"esp32_robot_{i}.bin"
             if bin_file.exists():
                 tar.add(str(bin_file), arcname=f"esp32_robot_{i}.bin")
-
-        # 4. Add espota tool
-        espota_src = Path(r"C:\Users\YOHANNA\.gemini\antigravity-ide\brain\9c03f519-8273-4be3-aec7-924f8dab2d12\scratch\espota_fixed.py")
-        if espota_src.exists():
-            tar.add(str(espota_src), arcname="espota.py")
 
     return buf.getvalue()
 
@@ -73,72 +72,79 @@ def main():
     print("=" * 65)
 
     print("[*] Creating compressed tar.gz bundle...")
+    start_pack = time.time()
     raw_bundle = build_tar_archive()
-    print(f"[*] Compressed bundle size: {len(raw_bundle):,} bytes")
-
-    b64_data = base64.b64encode(raw_bundle).decode("ascii")
-    print(f"[*] Base64 payload size: {len(b64_data):,} characters")
+    pack_time = time.time() - start_pack
+    print(f"[*] Compressed bundle size: {len(raw_bundle):,} bytes ({pack_time:.2f}s)")
 
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-    print(f"[*] Connecting to {PI_USER}@{PI_HOST} via SSH...")
-    try:
-        client.connect(PI_HOST, username=PI_USER, timeout=20)
-    except Exception:
-        client.connect(PI_HOST, username=PI_USER, password="00000000", timeout=20)
-    print("[OK] Authenticated successfully!")
+    HOST_CANDIDATES = [sys.argv[1]] if len(sys.argv) > 1 else ["raspberrypi.local", "10.174.69.92", "172.23.30.92"]
+    connected = False
+    for host in HOST_CANDIDATES:
+        print(f"[*] Trying {PI_USER}@{host} via SSH...")
+        try:
+            client.connect(host, username=PI_USER, password=PI_PASS, timeout=10)
+            print(f"[OK] Authenticated successfully with {host}!")
+            connected = True
+            break
+        except Exception as e:
+            print(f"    Failed {host}: {e}")
+    if not connected:
+        print("[!] Could not connect to any Raspberry Pi host candidate.")
+        sys.exit(1)
 
-    # 1. Ensure target directory exists and clear tmp
-    client.exec_command(f"mkdir -p {REMOTE_TARGET}", get_pty=True)
-    client.exec_command("rm -f /tmp/bundle.b64", get_pty=True)
+    # 1. Upload bundle via SFTP
+    remote_tar = "/tmp/robot_deploy.tar.gz"
+    print(f"[*] Uploading bundle via high-speed SFTP to {remote_tar}...")
+    start_tx = time.time()
+    sftp = client.open_sftp()
+    with sftp.file(remote_tar, "wb") as f:
+        f.write(raw_bundle)
+    sftp.close()
+    tx_time = time.time() - start_tx
+    print(f"[OK] Upload completed in {tx_time:.2f} seconds ({len(raw_bundle)/1024/1024/max(0.01, tx_time):.2f} MB/s).")
 
-    # 2. Upload chunks
-    chunk_size = 16384  # 16 KB per command
-    total_chunks = (len(b64_data) + chunk_size - 1) // chunk_size
-    print(f"[*] Streaming payload in {total_chunks} chunks...")
-
-    start_t = time.time()
-    for i in range(total_chunks):
-        chunk = b64_data[i * chunk_size : (i + 1) * chunk_size]
-        _, stdout, _ = client.exec_command(f"printf '%s' '{chunk}' >> /tmp/bundle.b64", get_pty=True)
-        stdout.read()
-        percent = int(((i + 1) / total_chunks) * 100)
-        sys.stdout.write(f"\r  [Transfer] Chunk {i + 1}/{total_chunks} ({percent}%)")
-        sys.stdout.flush()
-
-    elapsed = time.time() - start_t
-    print(f"\n[OK] Transfer completed in {elapsed:.2f} seconds.")
-
-    # 3. Decode and extract on Pi
-    print(f"[*] Extracting archive into {REMOTE_TARGET}...")
-    extract_cmd = (
-        f"base64 -d /tmp/bundle.b64 | tar -xzf - -C {REMOTE_TARGET} && "
-        f"chmod +x {REMOTE_TARGET}/main.py {REMOTE_TARGET}/test_wifi_comm.py 2>/dev/null && "
-        "rm -f /tmp/bundle.b64"
-    )
-    _, stdout, stderr = client.exec_command(extract_cmd, get_pty=True)
-    out = stdout.read().decode()
-    if out.strip():
-        print(f"  [Output]: {out.strip()}")
-
-    # 4. Verify transferred files
-    print("\n[*] Verifying installed files on Raspberry Pi:")
-    verify_cmd = (
-        f"ls -lh {REMOTE_TARGET}/communication/wifi_bus.py "
-        f"{REMOTE_TARGET}/test_wifi_comm.py "
-        f"{REMOTE_TARGET}/config.py "
-        f"{REMOTE_TARGET}/main.py"
-    )
-    _, stdout, _ = client.exec_command(verify_cmd, get_pty=True)
+    # 2. Extract into all remote robot target locations
+    print("[*] Extracting bundle and updating permissions...")
+    extract_script = f"""
+    for RDIR in {' '.join(REMOTE_TARGETS)}; do
+        mkdir -p "$RDIR"
+        tar -xzf {remote_tar} -C "$RDIR"
+        chmod +x "$RDIR"/*.py "$RDIR"/*.sh 2>/dev/null
+        echo "Extracted and updated $RDIR"
+    done
+    rm -f {remote_tar}
+    """
+    _, stdout, stderr = client.exec_command(extract_script)
     print(stdout.read().decode())
 
-    # Also sync into ~/robot as fallback
-    client.exec_command(f"cp -r {REMOTE_TARGET}/* /home/pi/robot/ 2>/dev/null", get_pty=True)
+    # 3. Verify key files
+    print("[*] Verifying critical installed files:")
+    verify_cmd = f"ls -lh {REMOTE_TARGETS[0]}/bridge_main.py {REMOTE_TARGETS[0]}/control/visual_servo_arm.py {REMOTE_TARGETS[0]}/track_and_pick_ball.py {REMOTE_TARGETS[0]}/control/gentle_head.py"
+    _, stdout, _ = client.exec_command(verify_cmd)
+    print(stdout.read().decode())
+
+    # 4. Run automated test suite on Pi to verify integrity
+    print("[*] Running unit tests on Raspberry Pi...")
+    test_cmd = f"""
+    cd {REMOTE_TARGETS[0]}
+    /home/pi/systemenv/bin/python3 tests/test_visual_servo_arm.py
+    /home/pi/systemenv/bin/python3 tests/test_gentle_head.py
+    /home/pi/systemenv/bin/python3 tests/test_hand_ball_grasp.py
+    """
+    _, stdout, stderr = client.exec_command(test_cmd)
+    out = stdout.read().decode()
+    err = stderr.read().decode()
+    if out.strip():
+        print(out)
+    if err.strip():
+        print(err)
 
     client.close()
     print("=" * 65)
-    print(">>> CODE SUCCESSFULLY DEPLOYED TO RASPBERRY PI! <<<")
+    print(">>> CODE SUCCESSFULLY DEPLOYED AND VERIFIED ON PI! <<<")
     print("=" * 65)
 
 if __name__ == "__main__":

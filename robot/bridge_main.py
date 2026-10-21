@@ -49,6 +49,7 @@ def print_banner(bridge_url: str, storage: InstructionStorage):
     print("=" * 72)
     print(f"  * Cloud Bridge URL   : {bridge_url}")
     print(f"  * Cloud Queue Node   : [ENTRY: pi_instructions]")
+    print(f"  * Relay Power Gate   : BCM GPIO 26 (Pin 37) [ACTIVE HIGH]")
     print(f"  * Local Storage File : {storage.file_path}")
     print(f"  * Pending Locally    : {storage.count()} instruction(s)")
     print("-" * 72)
@@ -67,6 +68,14 @@ def run_bridge_system(
     listener_only: bool = False,
     executor_only: bool = False,
 ):
+    # Ensure motor power relay gate is activated on GPIO 26
+    try:
+        from hardware.relay_gate import enable_motor_power_relay
+        relay_ok = enable_motor_power_relay()
+        print(f"[*] Motor Power Relay (GPIO 26): {'ACTIVATED' if relay_ok else 'INITIALIZED'}")
+    except Exception as e:
+        print(f"[!] Relay activation notice: {e}")
+
     storage = InstructionStorage()
 
     if clean_queue:

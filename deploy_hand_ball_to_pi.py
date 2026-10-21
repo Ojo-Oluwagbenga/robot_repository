@@ -8,7 +8,7 @@ import tarfile
 from pathlib import Path
 import paramiko
 
-PI_HOST = "10.208.131.92"
+PI_HOST = os.environ.get("PI_HOST", "10.174.69.92")
 PI_USER = "pi"
 PI_PASS = "00000000"
 
@@ -20,8 +20,21 @@ REMOTE_TARGETS = [
 ]
 
 FILES_TO_SYNC = [
-    ("robot/vision/hand_ball_tracker.py", "vision/hand_ball_tracker.py"),
+    ("robot/config.py", "config.py"),
+    ("robot/bridge_main.py", "bridge_main.py"),
+    ("robot/bridge/config.py", "bridge/config.py"),
+    ("robot/bridge/storage.py", "bridge/storage.py"),
+    ("robot/bridge/listener.py", "bridge/listener.py"),
+    ("robot/bridge/phone_speaker.py", "bridge/phone_speaker.py"),
+    ("robot/hardware/relay_gate.py", "hardware/relay_gate.py"),
+    ("robot/hardware/camera.py", "hardware/camera.py"),
+    ("robot/hardware/gpio_bus.py", "hardware/gpio_bus.py"),
     ("robot/vision/__init__.py", "vision/__init__.py"),
+    ("robot/vision/ball_tracker.py", "vision/ball_tracker.py"),
+    ("robot/vision/hand_ball_tracker.py", "vision/hand_ball_tracker.py"),
+    ("robot/vision/arm_pose_estimator.py", "vision/arm_pose_estimator.py"),
+    ("robot/vision/hand_recognizer.py", "vision/hand_recognizer.py"),
+    ("robot/vision/hand_marker_model.py", "vision/hand_marker_model.py"),
     ("robot/track_hand_ball.py", "track_hand_ball.py"),
     ("robot/run_hand_ball.sh", "run_hand_ball.sh"),
     ("robot/tests/test_hand_ball_grasp.py", "tests/test_hand_ball_grasp.py"),
